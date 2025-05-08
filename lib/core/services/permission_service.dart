@@ -9,9 +9,6 @@ abstract class PermissionService {
   /// Request motion sensors permission
   Future<bool> requestSensorPermission();
 
-  /// Request microphone permission
-  Future<bool> requestMicrophonePermission();
-
   /// Check camera permission status
   Future<bool> isCameraPermissionGranted();
 
@@ -20,9 +17,6 @@ abstract class PermissionService {
 
   /// Check motion sensors permission status
   Future<bool> isSensorPermissionGranted();
-
-  /// Check microphone permission status
-  Future<bool> isMicrophonePermissionGranted();
 
   /// Open app settings
   Future<bool> openAppSettings();

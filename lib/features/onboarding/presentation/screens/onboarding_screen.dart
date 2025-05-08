@@ -1,44 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/router.dart';
 import '../pages/welcome_page.dart';
 import '../pages/mounting_instructions_page.dart';
 import '../pages/data_explanation_page.dart';
 import '../pages/permissions_rationale_page.dart';
 import '../widgets/page_indicator.dart';
+import '../state/onboarding_state.dart';
 
 /// Onboarding screen that guides new users through the app's features
 /// and requests necessary permissions
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen>
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with SingleTickerProviderStateMixin {
   // For controlling the page view
   late final PageController _pageController;
-  int _currentPage = 0;
-
-  // Preload all pages to avoid rebuilding during transitions
-  late final List<Widget> _pages;
 
   // For page transition animations
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
 
+  // Directly track the current page in the widget state
+  int _currentPage = 0;
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-
-    // Initialize pages
-    _pages = [
-      const WelcomePage(),
-      const MountingInstructionsPage(),
-      const DataExplanationPage(),
-      const PermissionsRationalePage(),
-    ];
 
     // Set up animation controller for transitions with longer duration
     _animationController = AnimationController(
@@ -51,10 +46,49 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
 
     _animationController.forward();
+
+    // Initialize the onboarding state
+    _initOnboarding();
+
+    // Add listener to page controller to update local state
+    _pageController.addListener(_handlePageChange);
+  }
+
+  void _handlePageChange() {
+    if (_pageController.page != null &&
+        _pageController.page!.round() != _currentPage) {
+      setState(() {
+        _currentPage = _pageController.page!.round();
+      });
+    }
+  }
+
+  // Initialize onboarding state and check status
+  Future<void> _initOnboarding() async {
+    // We'll check the onboarding status when the provider is available
+    ref.read(onboardingStateProvider.future).then((provider) {
+      // Access the notifier from the provider
+      final notifier = ref.read(provider.notifier);
+      // Check if onboarding is already completed
+      notifier.checkOnboardingStatus().then((_) {
+        // If onboarding is complete, navigate to the home screen
+        if (ref.read(provider).isComplete) {
+          // Navigate to home screen
+          _navigateToHome();
+        }
+      });
+    });
+  }
+
+  void _navigateToHome() {
+    if (mounted) {
+      context.go(AppRoutes.homePath);
+    }
   }
 
   @override
   void dispose() {
+    _pageController.removeListener(_handlePageChange);
     _pageController.dispose();
     _animationController.dispose();
     super.dispose();
@@ -68,10 +102,44 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         curve: Curves.easeInOutCubic,
       );
       _animationController.forward();
+
+      // Update the state with the new page
+      ref.read(onboardingStateProvider.future).then((provider) {
+        ref.read(provider.notifier).setCurrentPage(_currentPage + 1);
+      });
     } else {
-      // On the last page, will implement onboarding completion logic
-      // TODO: Implement onboarding completion with preferences service
+      // On the last page, complete onboarding
+      _completeOnboardingAndRequestPermissions();
     }
+  }
+
+  void _completeOnboardingAndRequestPermissions() async {
+    final provider = await ref.read(onboardingStateProvider.future);
+    final notifier = ref.read(provider.notifier);
+
+    // Show loading indicator
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Request permissions
+    await notifier.requestAllPermissions();
+
+    // Complete onboarding
+    await notifier.completeOnboarding();
+
+    // Dismiss loading indicator
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+
+    // Always navigate to home regardless of permission status
+    // The app will handle permission checks in the features that need them
+    _navigateToHome();
   }
 
   void _skipToLastPage() {
@@ -82,6 +150,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       curve: Curves.easeInOutCubic,
     );
     _animationController.forward();
+
+    // Update the state with the new page
+    setState(() {
+      _currentPage = 3;
+    });
+
+    ref.read(onboardingStateProvider.future).then((provider) {
+      ref.read(provider.notifier).setCurrentPage(3);
+    });
   }
 
   @override
@@ -93,19 +170,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         child: Column(
           children: [
             // Skip button at top-right (only on first pages)
-            Align(
-              alignment: Alignment.topRight,
-              child:
-                  _currentPage < 3
-                      ? Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: TextButton(
-                          onPressed: _skipToLastPage,
-                          child: const Text('Skip'),
-                        ),
-                      )
-                      : const SizedBox.shrink(),
-            ),
+            Align(alignment: Alignment.topRight, child: _buildSkipButton()),
 
             // Page View with onboarding pages
             Expanded(
@@ -114,27 +179,25 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 physics:
                     const ClampingScrollPhysics(), // For smoother scrolling
                 onPageChanged: (index) {
+                  // Update the local state
                   setState(() {
                     _currentPage = index;
                   });
+
+                  // Update the provider state
+                  ref.read(onboardingStateProvider.future).then((provider) {
+                    ref.read(provider.notifier).setCurrentPage(index);
+                  });
+
                   _animationController.reset();
                   _animationController.forward();
                 },
-                children: List.generate(_pages.length, (index) {
-                  return AnimatedBuilder(
-                    animation: _animationController,
-                    child: _pages[index],
-                    builder: (context, child) {
-                      return FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Transform.scale(
-                          scale: _fadeAnimation.value,
-                          child: child,
-                        ),
-                      );
-                    },
-                  );
-                }),
+                children: [
+                  _buildAnimatedPage(const WelcomePage()),
+                  _buildAnimatedPage(const MountingInstructionsPage()),
+                  _buildAnimatedPage(const DataExplanationPage()),
+                  _buildAnimatedPage(const PermissionsRationalePage()),
+                ],
               ),
             ),
 
@@ -191,6 +254,33 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSkipButton() {
+    if (_currentPage < 3) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: TextButton(
+          onPressed: _skipToLastPage,
+          child: const Text('Skip'),
+        ),
+      );
+    } else {
+      return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildAnimatedPage(Widget page) {
+    return AnimatedBuilder(
+      animation: _animationController,
+      child: page,
+      builder: (context, child) {
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: Transform.scale(scale: _fadeAnimation.value, child: child),
+        );
+      },
     );
   }
 }

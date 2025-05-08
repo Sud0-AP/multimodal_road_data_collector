@@ -63,15 +63,6 @@ class PermissionsRationalePage extends StatelessWidget {
                         'To save collected data for processing and upload',
                     iconColor: Colors.orange,
                   ),
-                  const Divider(),
-                  _buildPermissionItem(
-                    context,
-                    icon: Icons.mic,
-                    title: 'Microphone',
-                    description:
-                        'To record audio for noise level analysis (optional)',
-                    iconColor: Colors.purple,
-                  ),
                 ],
               ),
             ),

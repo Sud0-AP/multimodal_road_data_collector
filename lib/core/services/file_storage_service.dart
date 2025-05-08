@@ -6,6 +6,9 @@ abstract class FileStorageService {
   /// Get the application temporary directory path
   Future<String> getTemporaryDirectoryPath();
 
+  /// Get the application external storage directory path (if available)
+  Future<String?> getExternalStorageDirectoryPath();
+
   /// Write a string to a file
   Future<bool> writeStringToFile(String content, String filePath);
 
@@ -30,9 +33,24 @@ abstract class FileStorageService {
   /// List files in a directory
   Future<List<String>> listFiles(String directoryPath);
 
+  /// List files in a directory with a specific extension
+  Future<List<String>> listFilesWithExtension(
+    String directoryPath,
+    String extension,
+  );
+
+  /// Copy a file from source to destination
+  Future<bool> copyFile(String sourcePath, String destinationPath);
+
+  /// Move a file from source to destination
+  Future<bool> moveFile(String sourcePath, String destinationPath);
+
   /// Get file size
   Future<int?> getFileSize(String filePath);
 
   /// Get available storage space
   Future<int?> getAvailableStorage();
+
+  /// Export file to a shareable location
+  Future<String?> exportFile(String sourcePath, String fileName);
 }

@@ -24,6 +24,12 @@ abstract class PreferencesService {
   /// Save a double value to preferences
   Future<bool> setDouble(String key, double value);
 
+  /// Get a list of strings from preferences
+  Future<List<String>?> getStringList(String key);
+
+  /// Save a list of strings to preferences
+  Future<bool> setStringList(String key, List<String> value);
+
   /// Check if preferences contains a key
   Future<bool> containsKey(String key);
 

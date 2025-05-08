@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 
 void main() {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Run the application
-  runApp(const App());
+  // Run the application wrapped with ProviderScope for Riverpod
+  runApp(const ProviderScope(child: App()));
 }
 
 class MyApp extends StatelessWidget {

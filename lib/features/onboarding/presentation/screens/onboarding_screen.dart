@@ -65,18 +65,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
 
   // Initialize onboarding state and check status
   Future<void> _initOnboarding() async {
-    // We'll check the onboarding status when the provider is available
-    ref.read(onboardingStateProvider.future).then((provider) {
-      // Access the notifier from the provider
-      final notifier = ref.read(provider.notifier);
+    // Use Future.microtask to ensure we're not modifying providers during build
+    Future.microtask(() async {
+      if (!mounted) return;
+
       // Check if onboarding is already completed
-      notifier.checkOnboardingStatus().then((_) {
-        // If onboarding is complete, navigate to the home screen
-        if (ref.read(provider).isComplete) {
-          // Navigate to home screen
-          _navigateToHome();
-        }
-      });
+      final notifier = ref.read(onboardingNotifierProvider.notifier);
+      await notifier.checkOnboardingStatus();
+
+      // If onboarding is complete, navigate to the home screen
+      if (mounted && ref.read(onboardingNotifierProvider).isComplete) {
+        _navigateToHome();
+      }
     });
   }
 
@@ -104,8 +104,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
       _animationController.forward();
 
       // Update the state with the new page
-      ref.read(onboardingStateProvider.future).then((provider) {
-        ref.read(provider.notifier).setCurrentPage(_currentPage + 1);
+      // Use Future.microtask to avoid updating state during build
+      Future.microtask(() {
+        ref
+            .read(onboardingNotifierProvider.notifier)
+            .setCurrentPage(_currentPage + 1);
       });
     } else {
       // On the last page, complete onboarding
@@ -114,8 +117,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   }
 
   void _completeOnboardingAndRequestPermissions() async {
-    final provider = await ref.read(onboardingStateProvider.future);
-    final notifier = ref.read(provider.notifier);
+    final notifier = ref.read(onboardingNotifierProvider.notifier);
 
     // Show loading indicator
     if (mounted) {
@@ -156,37 +158,47 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
       _currentPage = 3;
     });
 
-    ref.read(onboardingStateProvider.future).then((provider) {
-      ref.read(provider.notifier).setCurrentPage(3);
+    // Use Future.microtask to avoid updating state during build
+    Future.microtask(() {
+      ref.read(onboardingNotifierProvider.notifier).setCurrentPage(3);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Listen to the onboarding state
+    final onboardingState = ref.watch(onboardingNotifierProvider);
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // Skip button at top-right (only on first pages)
-            Align(alignment: Alignment.topRight, child: _buildSkipButton()),
+            // Skip button at top-right (only on first pages) - reduced padding
+            SizedBox(
+              height: 40, // Reduced fixed height for top slab
+              child: Align(
+                alignment: Alignment.topRight,
+                child: _buildSkipButton(),
+              ),
+            ),
 
             // Page View with onboarding pages
             Expanded(
               child: PageView(
                 controller: _pageController,
-                physics:
-                    const ClampingScrollPhysics(), // For smoother scrolling
+                physics: const ClampingScrollPhysics(),
                 onPageChanged: (index) {
                   // Update the local state
                   setState(() {
                     _currentPage = index;
                   });
 
-                  // Update the provider state
-                  ref.read(onboardingStateProvider.future).then((provider) {
-                    ref.read(provider.notifier).setCurrentPage(index);
+                  // Update the provider state - use Future.microtask to avoid build-time updates
+                  Future.microtask(() {
+                    ref
+                        .read(onboardingNotifierProvider.notifier)
+                        .setCurrentPage(index);
                   });
 
                   _animationController.reset();
@@ -201,53 +213,63 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
               ),
             ),
 
-            // Bottom navigation section
+            // Page indicators and navigation buttons - reduced bottom padding
             Container(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.only(
+                bottom: 16.0,
+                top: 8.0,
+              ), // Reduced padding
               child: Column(
+                mainAxisSize:
+                    MainAxisSize.min, // Make it take minimum vertical space
                 children: [
-                  // Page Indicator
-                  PageIndicator(
-                    pageCount: 4,
-                    currentPage: _currentPage,
-                    activeColor: theme.colorScheme.primary,
-                    inactiveColor: theme.colorScheme.primary.withOpacity(0.3),
+                  // Page indicators - reduced vertical padding
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8.0,
+                    ), // Reduced padding
+                    child: PageIndicator(
+                      currentPage: _currentPage,
+                      pageCount: 4,
+                    ),
                   ),
-                  const SizedBox(height: 24),
 
-                  // Next/Get Started button
+                  // Navigation button - slightly smaller
                   SizedBox(
-                    width: double.infinity,
+                    width: 180, // Slightly narrower
+                    height: 46, // Slightly shorter
                     child: ElevatedButton(
-                      onPressed: _goToNextPage,
+                      onPressed:
+                          onboardingState.isLoading ? null : _goToNextPage,
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16.0),
+                        foregroundColor: Colors.white,
+                        backgroundColor: theme.colorScheme.primary,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8.0),
+                          borderRadius: BorderRadius.circular(23),
                         ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10.0,
+                        ), // Reduced padding
                       ),
-                      child: Text(
-                        _currentPage < 3 ? 'Next' : 'Get Started',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child:
+                          onboardingState.isLoading
+                              ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : Text(
+                                _currentPage < 3 ? 'Next' : 'Get Started',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                     ),
                   ),
-
-                  // Back button (not on first page)
-                  if (_currentPage > 0)
-                    TextButton(
-                      onPressed: () {
-                        _animationController.reset();
-                        _pageController.previousPage(
-                          duration: const Duration(milliseconds: 600),
-                          curve: Curves.easeInOutCubic,
-                        );
-                        _animationController.forward();
-                      },
-                      child: const Text('Back'),
-                    ),
                 ],
               ),
             ),
@@ -257,30 +279,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     );
   }
 
+  Widget _buildAnimatedPage(Widget page) {
+    return FadeTransition(opacity: _fadeAnimation, child: page);
+  }
+
   Widget _buildSkipButton() {
+    // Only show Skip button on pages 0, 1, 2 (not on the last page)
     if (_currentPage < 3) {
       return Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.only(
+          right: 10.0,
+          top: 6.0,
+        ), // Reduced padding
         child: TextButton(
           onPressed: _skipToLastPage,
-          child: const Text('Skip'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 4.0,
+            ), // Reduced padding
+          ),
+          child: const Text('Skip', style: TextStyle(fontSize: 14)),
         ),
       );
     } else {
-      return const SizedBox.shrink();
+      // Return an empty container instead of SizedBox.shrink() to maintain layout
+      return Container();
     }
-  }
-
-  Widget _buildAnimatedPage(Widget page) {
-    return AnimatedBuilder(
-      animation: _animationController,
-      child: page,
-      builder: (context, child) {
-        return FadeTransition(
-          opacity: _fadeAnimation,
-          child: Transform.scale(scale: _fadeAnimation.value, child: child),
-        );
-      },
-    );
   }
 }

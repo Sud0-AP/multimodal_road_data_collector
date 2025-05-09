@@ -142,35 +142,29 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 }
 
-/// Factory provider for OnboardingNotifier
-final onboardingNotifierProvider = Provider<OnboardingNotifier>((ref) {
+/// A provider that asynchronously initializes the OnboardingNotifier with required services
+final onboardingNotifierProvider = StateNotifierProvider.autoDispose<
+  OnboardingNotifier,
+  OnboardingState
+>((ref) {
   // Get the permission service
   final permissionService = ref.watch(permissionServiceProvider);
 
-  // Use a dummy preferences service initially
-  final dummyPreferences = _DummyPreferencesService();
+  // Create a placeholder state notifier with a AsyncValue loading state
+  // Use a placeholder PreferencesService until the real one is ready
+  final preferencesServiceAsync = ref.watch(preferencesServiceProvider);
 
-  // Create and return the notifier
-  return OnboardingNotifier(permissionService, dummyPreferences);
-});
-
-/// Provider for OnboardingState, depending on the preferences service being initialized
-final onboardingStateProvider = FutureProvider<
-  StateNotifierProvider<OnboardingNotifier, OnboardingState>
->((ref) async {
-  // Get the notifier factory
-  final notifierFactory = ref.watch(onboardingNotifierProvider);
-
-  // Get the real preferences service when it's ready
-  final preferencesService = await ref.watch(preferencesServiceProvider.future);
-
-  // Create the provider with the real services
-  return StateNotifierProvider<OnboardingNotifier, OnboardingState>((ref) {
-    return OnboardingNotifier(
-      ref.watch(permissionServiceProvider),
-      preferencesService,
-    );
-  });
+  // Return the notifier with the actual services or a dummy preferences service
+  return preferencesServiceAsync.when(
+    data:
+        (preferencesService) =>
+            OnboardingNotifier(permissionService, preferencesService),
+    loading:
+        () => OnboardingNotifier(permissionService, _DummyPreferencesService()),
+    error:
+        (_, __) =>
+            OnboardingNotifier(permissionService, _DummyPreferencesService()),
+  );
 });
 
 /// A temporary dummy implementation of PreferencesService until the real one is available

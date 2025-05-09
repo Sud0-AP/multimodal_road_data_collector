@@ -49,6 +49,9 @@ dependencies:
   
   # Sensors
   sensors_plus: ^4.0.2
+  
+  # File system access
+  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:
@@ -63,7 +66,7 @@ dev_dependencies:
   
   # Testing utilities
   mockito: ^5.4.6
-  build_runner: ^2.4.8
+  build_runner: ^2.4.15
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

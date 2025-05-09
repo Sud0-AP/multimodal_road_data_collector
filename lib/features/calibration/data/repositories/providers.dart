@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multimodal_road_data_collector/core/services/providers.dart';
 import 'package:multimodal_road_data_collector/features/calibration/domain/repositories/calibration_repository.dart';
 
+import 'calibration_repository_file_impl.dart';
 import 'calibration_repository_impl.dart';
 
 /// Provider for the CalibrationRepository
@@ -40,3 +41,16 @@ final calibrationRepositoryAsyncProvider =
       // Return the repository with the preferences service
       return CalibrationRepositoryImpl(preferencesService);
     });
+
+/// Provider for a file-based CalibrationRepository implementation
+///
+/// Uses the FileStorageService for persistence of calibration data
+final calibrationRepositoryFileProvider = Provider<CalibrationRepository>((
+  ref,
+) {
+  // Get the file storage service from the provider
+  final fileStorageService = ref.watch(fileStorageServiceProvider);
+
+  // Return the repository implementation using file storage
+  return CalibrationRepositoryFileImpl(fileStorageService);
+});

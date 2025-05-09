@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'file_storage_service.dart';
+import 'implementations/file_storage_service_impl.dart';
 import 'implementations/permission_service_impl.dart';
 import 'implementations/preferences_service_impl.dart';
 import 'implementations/sensor_service_impl.dart';
@@ -22,10 +23,7 @@ final preferencesServiceProvider = FutureProvider<PreferencesService>((
 
 /// Provider for FileStorageService
 final fileStorageServiceProvider = Provider<FileStorageService>((ref) {
-  // Implementation will be added in a future task
-  throw UnimplementedError(
-    'FileStorageService implementation is not yet available',
-  );
+  return FileStorageServiceImpl();
 });
 
 /// Provider for SensorService

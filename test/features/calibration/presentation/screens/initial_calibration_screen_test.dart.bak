@@ -1,0 +1,145 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:multimodal_road_data_collector/features/calibration/presentation/screens/initial_calibration_screen.dart';
+
+void main() {
+  testWidgets(
+    'InitialCalibrationScreen displays correctly with static elements',
+    (WidgetTester tester) async {
+      // Build the widget
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(home: InitialCalibrationScreen()),
+        ),
+      );
+
+      // Verify that the app bar title is correct
+      expect(find.text('Initial Calibration'), findsOneWidget);
+
+      // Verify instruction card elements
+      expect(find.text('Static Sensor Calibration'), findsOneWidget);
+      expect(
+        find.text(
+          'This one-time calibration will help ensure accurate sensor readings:',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Place your device on a flat, level surface'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Keep the device completely still during calibration'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Wait for the process to complete (approx. 15 seconds)'),
+        findsOneWidget,
+      );
+
+      // Verify initial status message
+      expect(
+        find.text(
+          'Place your device on a flat surface and press "Start Calibration"',
+        ),
+        findsOneWidget,
+      );
+
+      // Verify Start Calibration button
+      expect(find.text('Start Calibration'), findsOneWidget);
+      expect(find.byType(ElevatedButton), findsOneWidget);
+
+      // Initially, progress indicator and cancel button should not be visible
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.text('Cancel'), findsNothing);
+    },
+  );
+
+  testWidgets('Pressing Start Calibration button shows progress UI', (
+    WidgetTester tester,
+  ) async {
+    // Build the widget with a fixed size to simulate a real device
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 800,
+            child: InitialCalibrationScreen(),
+          ),
+        ),
+      ),
+    );
+
+    // Find the start button and ensure it's visible
+    final startButton = find.text('Start Calibration');
+    await tester.ensureVisible(startButton);
+    await tester.pumpAndSettle();
+
+    // Press the Start Calibration button
+    await tester.tap(startButton);
+    await tester.pump();
+
+    // Verify that progress UI is visible now
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.text('Calibration Progress:'), findsOneWidget);
+    expect(find.text('0%'), findsOneWidget);
+
+    // Verify status message is updated
+    expect(find.text('Calibrating... Keep your device still'), findsOneWidget);
+
+    // Verify the button text changed and Cancel button appeared
+    expect(find.text('Calibrating...'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+  });
+
+  testWidgets('Pressing Cancel button resets UI state', (
+    WidgetTester tester,
+  ) async {
+    // Build the widget with a fixed size to simulate a real device
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 800,
+            child: InitialCalibrationScreen(),
+          ),
+        ),
+      ),
+    );
+
+    // Find the start button and ensure it's visible
+    final startButton = find.text('Start Calibration');
+    await tester.ensureVisible(startButton);
+    await tester.pumpAndSettle();
+
+    // Press the Start Calibration button
+    await tester.tap(startButton);
+    await tester.pump();
+
+    // Find the cancel button and ensure it's visible
+    final cancelButton = find.text('Cancel');
+    await tester.ensureVisible(cancelButton);
+    await tester.pumpAndSettle();
+
+    // Press the Cancel button
+    await tester.tap(cancelButton);
+    await tester.pump();
+
+    // Verify that progress UI is hidden again
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Calibration Progress:'), findsNothing);
+
+    // Verify status message is reset to show cancellation
+    expect(
+      find.text('Calibration cancelled. Try again when ready.'),
+      findsOneWidget,
+    );
+
+    // Verify the button text changed back
+    expect(find.text('Start Calibration'), findsOneWidget);
+    expect(find.text('Cancel'), findsNothing);
+  });
+}

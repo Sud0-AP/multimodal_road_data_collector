@@ -1,0 +1,148 @@
+import 'dart:async';
+
+import 'package:sensors_plus/sensors_plus.dart';
+
+import '../sensor_service.dart';
+
+/// Implementation of SensorService using the sensors_plus package
+class SensorServiceImpl implements SensorService {
+  /// Stream controller for combined sensor data
+  final _sensorDataStreamController = StreamController<SensorData>.broadcast();
+
+  /// Flag indicating if sensor data collection is active
+  bool _isCollectionActive = false;
+
+  /// Subscription for accelerometer events
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+
+  /// Subscription for gyroscope events
+  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
+
+  /// Latest accelerometer data
+  AccelerometerEvent? _latestAccelerometerEvent;
+
+  /// Latest gyroscope data
+  GyroscopeEvent? _latestGyroscopeEvent;
+
+  /// Timer for emitting sensor data at 100Hz
+  Timer? _sensorDataEmitTimer;
+
+  @override
+  Future<void> initialize() async {
+    // No initialization needed for sensors_plus
+    // Just make sure stream controller is created
+    if (_sensorDataStreamController.isClosed) {
+      throw StateError(
+        'SensorService has been disposed and cannot be reinitialized',
+      );
+    }
+  }
+
+  @override
+  Stream<SensorData> getSensorDataStream() {
+    return _sensorDataStreamController.stream;
+  }
+
+  @override
+  Future<void> startSensorDataCollection() async {
+    if (_isCollectionActive) {
+      return;
+    }
+
+    // Set collection as active
+    _isCollectionActive = true;
+
+    // Subscribe to accelerometer events
+    _accelerometerSubscription = accelerometerEvents.listen(
+      (AccelerometerEvent event) {
+        _latestAccelerometerEvent = event;
+      },
+      onError: (error) {
+        // Handle errors
+        _sensorDataStreamController.addError(
+          Exception('Accelerometer error: $error'),
+        );
+      },
+    );
+
+    // Subscribe to gyroscope events
+    _gyroscopeSubscription = gyroscopeEvents.listen(
+      (GyroscopeEvent event) {
+        _latestGyroscopeEvent = event;
+      },
+      onError: (error) {
+        // Handle errors
+        _sensorDataStreamController.addError(
+          Exception('Gyroscope error: $error'),
+        );
+      },
+    );
+
+    // Start timer to emit sensor data at 100Hz (10ms interval)
+    _sensorDataEmitTimer = Timer.periodic(const Duration(milliseconds: 10), (
+      timer,
+    ) {
+      _emitCombinedSensorData();
+    });
+  }
+
+  /// Combine the latest accelerometer and gyroscope data and emit it
+  void _emitCombinedSensorData() {
+    // Only emit if both accelerometer and gyroscope data are available
+    if (_latestAccelerometerEvent != null && _latestGyroscopeEvent != null) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+      final sensorData = SensorData(
+        accelerometerX: _latestAccelerometerEvent!.x,
+        accelerometerY: _latestAccelerometerEvent!.y,
+        accelerometerZ: _latestAccelerometerEvent!.z,
+        gyroscopeX: _latestGyroscopeEvent!.x,
+        gyroscopeY: _latestGyroscopeEvent!.y,
+        gyroscopeZ: _latestGyroscopeEvent!.z,
+        timestamp: timestamp,
+      );
+
+      _sensorDataStreamController.add(sensorData);
+    }
+  }
+
+  @override
+  Future<void> stopSensorDataCollection() async {
+    if (!_isCollectionActive) {
+      return;
+    }
+
+    // Cancel accelerometer subscription
+    await _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
+
+    // Cancel gyroscope subscription
+    await _gyroscopeSubscription?.cancel();
+    _gyroscopeSubscription = null;
+
+    // Cancel timer
+    _sensorDataEmitTimer?.cancel();
+    _sensorDataEmitTimer = null;
+
+    // Reset latest events
+    _latestAccelerometerEvent = null;
+    _latestGyroscopeEvent = null;
+
+    // Mark collection as inactive
+    _isCollectionActive = false;
+  }
+
+  @override
+  bool isSensorDataCollectionActive() {
+    return _isCollectionActive;
+  }
+
+  @override
+  Future<void> dispose() async {
+    // Stop data collection if active
+    await stopSensorDataCollection();
+
+    // Close stream controller
+    await _sensorDataStreamController.close();
+  }
+}

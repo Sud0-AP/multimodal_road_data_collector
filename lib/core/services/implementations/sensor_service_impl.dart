@@ -27,10 +27,36 @@ class SensorServiceImpl implements SensorService {
   /// Timer for emitting sensor data at 100Hz
   Timer? _sensorDataEmitTimer;
 
+  /// Last emission timestamp to monitor actual frequency
+  int? _lastEmissionTimestamp;
+
+  /// Count of emissions for frequency monitoring
+  int _emissionCount = 0;
+
+  /// Target interval between emissions in milliseconds (10ms = 100Hz)
+  static const _targetIntervalMs = 10;
+
   @override
   Future<void> initialize() async {
-    // No initialization needed for sensors_plus
-    // Just make sure stream controller is created
+    // Check if sensors are available
+    try {
+      // Quick check by requesting a single reading from each sensor
+      await accelerometerEvents.first.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => throw TimeoutException('Accelerometer not responding'),
+      );
+      await gyroscopeEvents.first.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => throw TimeoutException('Gyroscope not responding'),
+      );
+    } catch (e) {
+      _sensorDataStreamController.addError(
+        Exception('Sensor initialization failed: $e'),
+      );
+      // We don't throw here to allow the app to continue,
+      // but the error will be available in the stream
+    }
+
     if (_sensorDataStreamController.isClosed) {
       throw StateError(
         'SensorService has been disposed and cannot be reinitialized',
@@ -48,6 +74,10 @@ class SensorServiceImpl implements SensorService {
     if (_isCollectionActive) {
       return;
     }
+
+    // Reset monitoring variables
+    _lastEmissionTimestamp = null;
+    _emissionCount = 0;
 
     // Set collection as active
     _isCollectionActive = true;
@@ -79,11 +109,10 @@ class SensorServiceImpl implements SensorService {
     );
 
     // Start timer to emit sensor data at 100Hz (10ms interval)
-    _sensorDataEmitTimer = Timer.periodic(const Duration(milliseconds: 10), (
-      timer,
-    ) {
-      _emitCombinedSensorData();
-    });
+    _sensorDataEmitTimer = Timer.periodic(
+      const Duration(milliseconds: _targetIntervalMs),
+      (_) => _emitCombinedSensorData(),
+    );
   }
 
   /// Combine the latest accelerometer and gyroscope data and emit it
@@ -91,6 +120,23 @@ class SensorServiceImpl implements SensorService {
     // Only emit if both accelerometer and gyroscope data are available
     if (_latestAccelerometerEvent != null && _latestGyroscopeEvent != null) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+      // Monitor actual emission frequency
+      if (_lastEmissionTimestamp != null) {
+        final interval = timestamp - _lastEmissionTimestamp!;
+        _emissionCount++;
+
+        // Log if we're significantly deviating from target frequency
+        // (only log every 100 emissions to avoid flooding)
+        if (_emissionCount % 100 == 0 &&
+            (interval < _targetIntervalMs * 0.5 ||
+                interval > _targetIntervalMs * 1.5)) {
+          print(
+            'WARNING: Sensor emission interval ($interval ms) is deviating from target ($_targetIntervalMs ms)',
+          );
+        }
+      }
+      _lastEmissionTimestamp = timestamp;
 
       final sensorData = SensorData(
         accelerometerX: _latestAccelerometerEvent!.x,

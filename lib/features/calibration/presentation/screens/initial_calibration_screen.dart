@@ -8,6 +8,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/services/sensor_service.dart';
 import '../../data/repositories/providers.dart';
 import '../../domain/models/initial_calibration_data.dart';
+import '../../domain/utils/calibration_validator.dart';
 import '../state/calibration_provider.dart';
 import '../state/calibration_state.dart';
 
@@ -28,6 +29,8 @@ class _InitialCalibrationScreenState
   // Calibration state
   bool _isCalibrating = false;
   bool _isComplete = false;
+  bool _forceRecalibration = false;
+  String _recalibrationReason = '';
   double _progress = 0.0;
   String _statusMessage =
       'Place your device in the mount and keep it perfectly still.';
@@ -39,6 +42,9 @@ class _InitialCalibrationScreenState
   bool _isRepositoryReady = false;
   bool _isInitializing = true;
   String _initializationError = '';
+
+  // Checking calibration validity
+  bool _isCheckingValidity = false;
 
   // Stream subscription for calibration updates
   StreamSubscription? _calibrationSubscription;
@@ -106,14 +112,50 @@ class _InitialCalibrationScreenState
       final hasData = await repository.hasInitialCalibrationData();
 
       if (hasData) {
+        // Set state to checking validity
+        setState(() {
+          _isCheckingValidity = true;
+          _statusMessage = 'Checking calibration validity...';
+        });
+
         final data = await repository.loadInitialCalibrationData();
         if (data != null) {
+          // Check if recalibration is needed
+          final sensorService = ref.read(sensorServiceProvider);
+          final recalibrationNeeded =
+              await CalibrationValidator.isRecalibrationNeeded(
+                data,
+                sensorService,
+              );
+
+          if (recalibrationNeeded) {
+            // Simplified recalibration flow - treat all recalibration reasons the same
+            setState(() {
+              _forceRecalibration = true;
+              _recalibrationReason = 'Recalibration required';
+              _statusMessage =
+                  'Recalibration required for accurate data collection.';
+              _calibrationData = data;
+              _orientation = data.deviceOrientation;
+              _isCheckingValidity = false;
+              _isComplete = false; // Ensure we don't show the Continue button
+              _movementDetected =
+                  true; // Use same styling as movement detection
+            });
+          } else {
+            // Calibration data is still valid
+            setState(() {
+              _calibrationData = data;
+              _orientation = data.deviceOrientation;
+              _statusMessage = 'Previous calibration data loaded and is valid.';
+              _isComplete =
+                  true; // Mark as complete if we have existing valid data
+              _isCheckingValidity = false;
+            });
+          }
+        } else {
           setState(() {
-            _calibrationData = data;
-            _orientation = data.deviceOrientation;
-            _statusMessage = 'Previous calibration data loaded.';
-            _isComplete =
-                true; // Mark as complete if we have existing valid data
+            _isCheckingValidity = false;
           });
         }
       }
@@ -121,6 +163,9 @@ class _InitialCalibrationScreenState
       debugPrint('Error checking existing calibration data: $e');
       // We don't set an error state here because it's not critical
       // The user can still perform a new calibration
+      setState(() {
+        _isCheckingValidity = false;
+      });
     }
   }
 
@@ -144,6 +189,21 @@ class _InitialCalibrationScreenState
     // Cancel any existing subscription
     _cancelCalibrationSubscription();
 
+    // Clear existing calibration data if this is a manual recalibration
+    if (_calibrationData != null) {
+      try {
+        final repository = await ref.read(
+          calibrationRepositoryAsyncProvider.future,
+        );
+        // Force delete existing calibration data
+        await repository.clearCalibrationData();
+        debugPrint('Previous calibration data cleared for fresh calibration');
+      } catch (e) {
+        debugPrint('Error clearing previous calibration data: $e');
+        // Continue anyway as we'll overwrite the data
+      }
+    }
+
     // Reset the state
     setState(() {
       _isCalibrating = true;
@@ -153,6 +213,8 @@ class _InitialCalibrationScreenState
       _orientation = DeviceOrientation.unknown;
       _isComplete = false;
       _calibrationData = null;
+      _forceRecalibration = false;
+      _recalibrationReason = '';
     });
 
     try {
@@ -335,6 +397,10 @@ class _InitialCalibrationScreenState
       return _buildLoadingView(theme);
     }
 
+    if (_isCheckingValidity) {
+      return _buildCheckingValidityView(theme);
+    }
+
     if (!_isRepositoryReady && _initializationError.isNotEmpty) {
       return _buildErrorView(theme);
     }
@@ -382,6 +448,37 @@ class _InitialCalibrationScreenState
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
                 color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Checking calibration validity view
+  Widget _buildCheckingValidityView(ThemeData theme) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: theme.colorScheme.primary),
+            const SizedBox(height: 16),
+            Text(
+              'Checking calibration validity...',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Please keep your device still',
+              style: TextStyle(
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
           ],
@@ -575,7 +672,8 @@ class _InitialCalibrationScreenState
             ? theme.colorScheme.tertiary
             : _isComplete
             ? theme.colorScheme.primary
-            : _movementDetected
+            : _movementDetected ||
+                _forceRecalibration // Treat force recalibration like movement detection
             ? theme.colorScheme.error
             : theme.colorScheme.onSurface;
 
@@ -621,6 +719,7 @@ class _InitialCalibrationScreenState
                 ),
               ),
             ),
+
             const SizedBox(height: 16),
 
             // Current phase
@@ -666,7 +765,8 @@ class _InitialCalibrationScreenState
                           color:
                               _isComplete
                                   ? theme.colorScheme.primary
-                                  : _movementDetected
+                                  : _movementDetected ||
+                                      _forceRecalibration // Treat the same
                                   ? theme.colorScheme.error
                                   : theme.colorScheme.tertiary,
                           minHeight: 8,
@@ -711,8 +811,8 @@ class _InitialCalibrationScreenState
                 ),
               ),
 
-            // Completion message with details button
-            if (_isComplete && _calibrationData != null)
+            // Completion message with details button - only show if complete and not needing recalibration
+            if (_isComplete && _calibrationData != null && !_forceRecalibration)
               Padding(
                 padding: const EdgeInsets.only(top: 16.0),
                 child: Container(
@@ -785,8 +885,9 @@ class _InitialCalibrationScreenState
 
   // Action button
   Widget _buildActionButton(ThemeData theme) {
-    // If calibration is complete, show both continue and recalibrate buttons
-    if (_isComplete && _calibrationData != null) {
+    // If calibration is complete and valid (not requiring recalibration),
+    // show both continue and recalibrate buttons
+    if (_isComplete && _calibrationData != null && !_forceRecalibration) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -832,66 +933,66 @@ class _InitialCalibrationScreenState
       );
     }
 
-    // For all other states, show a single button (start, cancel, or try again)
+    // For forced recalibration, movement detection, or starting a new calibration,
+    // show a single "Calibrate Now" button with consistent styling
+    if (_forceRecalibration || _movementDetected || !_isCalibrating) {
+      return Center(
+        child: SizedBox(
+          width: 200,
+          height: 48,
+          child: ElevatedButton.icon(
+            onPressed: _startCalibration,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Calibrate Now'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  _forceRecalibration || _movementDetected
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.tertiary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              elevation: 2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // For ongoing calibration, show cancel button
     return Center(
       child: SizedBox(
         width: 200,
         height: 48,
-        child: ElevatedButton(
-          onPressed:
-              _isRepositoryReady
-                  ? (_isCalibrating ? _cancelCalibration : _startCalibration)
-                  : null,
+        child: ElevatedButton.icon(
+          onPressed: _cancelCalibration,
+          icon: const Icon(Icons.cancel),
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Cancel',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
           style: ElevatedButton.styleFrom(
-            backgroundColor:
-                _isCalibrating
-                    ? Colors.redAccent
-                    : _movementDetected
-                    ? Colors.orange
-                    : theme.colorScheme.tertiary,
+            backgroundColor: Colors.redAccent,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
             elevation: 2,
-          ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            transitionBuilder: (Widget child, Animation<double> animation) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            child:
-                _isCalibrating
-                    ? Row(
-                      key: const ValueKey('calibrating'),
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    )
-                    : Text(
-                      _movementDetected ? 'Try Again' : 'Start Calibration',
-                      key: ValueKey(_movementDetected ? 'retry' : 'start'),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
           ),
         ),
       ),

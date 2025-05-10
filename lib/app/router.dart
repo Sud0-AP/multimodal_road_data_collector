@@ -48,6 +48,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.homePath,
         name: AppRoutes.home,
         builder: (context, state) {
+          // Get the calibration status to conditionally show the recording button
+          final calibrationNeeded = ref.watch(calibrationNeededProvider);
+          final calibrationCompleted = ref.watch(calibrationCompletedProvider);
+          final showRecordButton = !calibrationNeeded || calibrationCompleted;
+
           // Placeholder home screen with a button to navigate to calibration screen
           return Scaffold(
             appBar: AppBar(title: const Text('Road Data Collector')),
@@ -65,10 +70,24 @@ final routerProvider = Provider<GoRouter>((ref) {
                     child: const Text('Calibrate Sensors'),
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => context.pushNamed(AppRoutes.recording),
-                    child: const Text('Record Road Data'),
-                  ),
+                  // Only show the Record Road Data button if calibration is completed
+                  if (showRecordButton)
+                    ElevatedButton(
+                      onPressed: () => context.pushNamed(AppRoutes.recording),
+                      child: const Text('Record Road Data'),
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Calibration required before recording',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -146,6 +165,13 @@ class RouterNotifier extends ChangeNotifier {
     // redirect to the calibration screen (ensures calibration on every app launch)
     if (onboardingCompleted &&
         currentLocation == AppRoutes.homePath &&
+        calibrationNeeded &&
+        !calibrationCompleted) {
+      return AppRoutes.calibrationPath;
+    }
+
+    // Prevent navigation to recording screen if calibration is not completed
+    if (currentLocation == AppRoutes.recordingPath &&
         calibrationNeeded &&
         !calibrationCompleted) {
       return AppRoutes.calibrationPath;

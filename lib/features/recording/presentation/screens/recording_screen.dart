@@ -1,12 +1,18 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router.dart';
 import '../../../../core/services/camera_service.dart';
 import '../../../../core/services/file_storage_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../features/calibration/presentation/state/calibration_provider.dart';
+import '../../domain/managers/recording_session_manager.dart';
 import '../state/recording_state.dart';
+import '../state/pre_recording_calibration_state.dart';
+import '../widgets/pre_recording_calibration_overlay.dart';
 
 /// Recording screen with camera preview and recording controls
 class RecordingScreen extends ConsumerStatefulWidget {
@@ -25,6 +31,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   late final CameraService _cameraService;
   late final FileStorageService _fileStorageService;
   late final PermissionService _permissionService;
+  late final RecordingSessionManager _recordingSessionManager;
+
+  // Flag for sensor initialization status
+  bool _isSensorInitialized = false;
+
+  // Subscription to sensor data
+  StreamSubscription? _sensorDataSubscription;
 
   @override
   void initState() {
@@ -33,10 +46,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     _cameraService = ref.read(cameraServiceProvider);
     _fileStorageService = ref.read(fileStorageServiceProvider);
     _permissionService = ref.read(permissionServiceProvider);
+    _recordingSessionManager = ref.read(recordingSessionManagerProvider);
 
     // Schedule the actual initialization after the build is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeServices();
+      _checkCalibrationStatus();
     });
   }
 
@@ -67,23 +82,160 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       }
 
       await _cameraService.initialize();
+
+      // Initialize the sensor service
+      await _recordingSessionManager.initialize();
+      _isSensorInitialized = true;
+
       notifier.setReady();
     } catch (e) {
-      notifier.setError('Error initializing camera: $e');
+      notifier.setError('Error initializing services: $e');
+    }
+  }
+
+  // Check if calibration is completed
+  void _checkCalibrationStatus() {
+    final calibrationNeeded = ref.read(calibrationNeededProvider);
+    final calibrationCompleted = ref.read(calibrationCompletedProvider);
+
+    if (calibrationNeeded && !calibrationCompleted && mounted) {
+      // Show dialog prompting for calibration
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder:
+            (context) => AlertDialog(
+              title: const Text('Calibration Required'),
+              content: const Text(
+                'You need to complete the initial calibration before recording. '
+                'Please keep your device still during calibration.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.go(AppRoutes.calibrationPath);
+                  },
+                  child: const Text('Go to Calibration'),
+                ),
+              ],
+            ),
+      );
     }
   }
 
   @override
   void dispose() {
     _recordingTimer?.cancel();
+    _sensorDataSubscription?.cancel();
     _cameraService.dispose();
     super.dispose();
+  }
+
+  // Initiate pre-recording calibration before starting recording
+  Future<void> _startPreRecordingCalibration() async {
+    try {
+      // First check if initial calibration is completed
+      final calibrationNeeded = ref.read(calibrationNeededProvider);
+      final calibrationCompleted = ref.read(calibrationCompletedProvider);
+
+      if (calibrationNeeded && !calibrationCompleted) {
+        // Show dialog prompting for calibration
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder:
+                (context) => AlertDialog(
+                  title: const Text('Calibration Required'),
+                  content: const Text(
+                    'You need to complete the initial calibration before recording. '
+                    'Please keep your device still during calibration.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        context.go(AppRoutes.calibrationPath);
+                      },
+                      child: const Text('Go to Calibration'),
+                    ),
+                  ],
+                ),
+          );
+        }
+        return; // Don't proceed with pre-recording calibration
+      }
+
+      // Reset pre-recording calibration state
+      ref.read(preRecordingCalibrationProvider.notifier).reset();
+
+      // Update recording state
+      ref.read(recordingStateProvider.notifier).startCalibration();
+    } catch (e) {
+      ref
+          .read(recordingStateProvider.notifier)
+          .setError('Error starting calibration: $e');
+    }
+  }
+
+  // Handle successful calibration completion
+  void _handleCalibrationComplete(
+    double sessionAccelOffsetZ,
+    double gyroZDrift,
+    double bumpThreshold,
+  ) {
+    // Update recording state
+    ref
+        .read(recordingStateProvider.notifier)
+        .completeCalibration(
+          sessionAccelOffsetZ: sessionAccelOffsetZ,
+          gyroZDrift: gyroZDrift,
+          bumpThreshold: bumpThreshold,
+        );
+
+    // Apply session calibration parameters to the recording session manager
+    _recordingSessionManager.setSessionCalibrationParameters(
+      sessionAccelOffsetZ: sessionAccelOffsetZ,
+      gyroZDrift: gyroZDrift,
+      bumpThreshold: bumpThreshold,
+    );
+
+    // Start the actual recording
+    _startRecording();
+  }
+
+  // Handle calibration failure
+  void _handleCalibrationFailed() {
+    // Update recording state
+    ref.read(recordingStateProvider.notifier).failCalibration();
+
+    // Show error message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Calibration failed. Please try again.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   // Start recording
   Future<void> _startRecording() async {
     try {
       final notifier = ref.read(recordingStateProvider.notifier);
+
+      // Start sensor data collection if not already started during calibration
+      if (_isSensorInitialized) {
+        await _recordingSessionManager.startSensorDataCollection();
+
+        // Set up a subscription to process sensor data if needed
+        // This might be used later for UI feedback during recording
+        _sensorDataSubscription = _recordingSessionManager
+            .getProcessedSensorStream()
+            .listen(_handleSensorData);
+      }
 
       // Start video recording
       await _cameraService.startVideoRecording();
@@ -100,12 +252,33 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     }
   }
 
+  void _handleSensorData(ProcessedSensorData data) {
+    // We can use this to update UI based on sensor data
+    // For example, show bump indicators when a bump is detected
+    if (data.isBumpDetected) {
+      // You could update UI to show a bump was detected
+      // This could be a temporary visual indicator
+      debugPrint('Bump detected: ${data.accelMagnitude}');
+    }
+  }
+
   // Stop recording
   Future<void> _stopRecording() async {
     try {
-      // Cancel the duration timer
+      // Cancel recording timer
       _recordingTimer?.cancel();
       _recordingTimer = null;
+
+      // Stop sensor data collection
+      if (_isSensorInitialized &&
+          _recordingSessionManager.isDataCollectionActive()) {
+        await _recordingSessionManager.stopSensorDataCollection();
+        // Reset session-specific calibration parameters
+        _recordingSessionManager.clearSessionCalibrationParameters();
+        // Cancel sensor data subscription
+        await _sensorDataSubscription?.cancel();
+        _sensorDataSubscription = null;
+      }
 
       // Stop video recording
       final videoPath = await _cameraService.stopVideoRecording();
@@ -139,6 +312,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   @override
   Widget build(BuildContext context) {
     final recordingState = ref.watch(recordingStateProvider);
+    final calibrationNeeded = ref.watch(calibrationNeededProvider);
+    final calibrationCompleted = ref.watch(calibrationCompletedProvider);
 
     return Scaffold(
       // Using a transparent AppBar to get full screen camera view
@@ -148,11 +323,20 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         backgroundColor: Colors.black.withOpacity(0.5),
         elevation: 0,
       ),
-      body: _buildBody(recordingState),
+      body: _buildBody(
+        recordingState,
+        calibrationNeeded && !calibrationCompleted,
+      ),
     );
   }
 
-  Widget _buildBody(RecordingState state) {
+  String _formatDuration(int seconds) {
+    final minutes = (seconds / 60).floor();
+    final remainingSeconds = seconds % 60;
+    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildBody(RecordingState state, bool calibrationNeeded) {
     switch (state.status) {
       case RecordingStatus.initial:
       case RecordingStatus.initializing:
@@ -175,7 +359,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
               const Icon(Icons.error_outline, color: Colors.red, size: 48),
               const SizedBox(height: 16),
               Text(state.errorMessage ?? 'An error occurred'),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _initializeServices,
                 child: const Text('Retry'),
@@ -234,82 +418,104 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                 ),
               ),
 
+            // Calibration required warning banner
+            if (calibrationNeeded)
+              Positioned(
+                top: kToolbarHeight + MediaQuery.of(context).padding.top + 16,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Initial calibration required before recording',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
             // Controls at the bottom
             Positioned(
               bottom: 0,
               left: 0,
               right: 0,
-              child: _buildControls(state),
+              child: _buildControls(state, calibrationNeeded),
+            ),
+
+            // Calibration overlay
+            if (state.status == RecordingStatus.calibrating)
+              PreRecordingCalibrationOverlay(
+                onCalibrationComplete: _handleCalibrationComplete,
+                onCalibrationFailed: _handleCalibrationFailed,
+              ),
+          ],
+        );
+
+      case RecordingStatus.calibrating:
+        return Stack(
+          children: [
+            // Camera preview in background
+            SizedBox.expand(
+              child:
+                  _cameraService.isInitialized
+                      ? _cameraService.previewWidget
+                      : const ColoredBox(
+                        color: Colors.black,
+                        child: Center(
+                          child: Text(
+                            'Camera not initialized',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+            ),
+
+            // Calibration overlay
+            PreRecordingCalibrationOverlay(
+              onCalibrationComplete: _handleCalibrationComplete,
+              onCalibrationFailed: _handleCalibrationFailed,
             ),
           ],
         );
     }
   }
 
-  Widget _buildControls(RecordingState state) {
+  Widget _buildControls(RecordingState state, bool calibrationNeeded) {
     return Container(
       color: Colors.black.withOpacity(0.5),
-      padding: const EdgeInsets.symmetric(vertical: 20.0),
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            // Record button
-            if (state.status == RecordingStatus.ready)
-              _buildControlButton(
-                icon: Icons.circle,
-                color: Colors.red,
-                onPressed: _startRecording,
-                label: 'Record',
-              ),
-
-            // Stop button
-            if (state.status == RecordingStatus.recording)
-              _buildControlButton(
-                icon: Icons.stop,
-                color: Colors.white,
-                onPressed: _stopRecording,
-                label: 'Stop',
-              ),
-
-            // Reset button after recording
-            if (state.status == RecordingStatus.saved ||
-                state.status == RecordingStatus.stopped)
-              _buildControlButton(
-                icon: Icons.refresh,
-                color: Colors.blue,
-                onPressed:
-                    () => ref.read(recordingStateProvider.notifier).reset(),
-                label: 'New',
-              ),
-          ],
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          if (state.status == RecordingStatus.recording)
+            FloatingActionButton(
+              onPressed: _stopRecording,
+              backgroundColor: Colors.red,
+              child: const Icon(Icons.stop, color: Colors.white),
+            )
+          else
+            FloatingActionButton(
+              onPressed:
+                  calibrationNeeded
+                      ? _checkCalibrationStatus
+                      : _startPreRecordingCalibration,
+              backgroundColor: calibrationNeeded ? Colors.grey : Colors.red,
+              child: const Icon(Icons.fiber_manual_record, color: Colors.white),
+            ),
+        ],
       ),
     );
-  }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required Color color,
-    required VoidCallback onPressed,
-    required String label,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          onPressed: onPressed,
-          icon: Icon(icon, size: 40, color: color),
-          padding: const EdgeInsets.all(12),
-        ),
-        Text(label, style: const TextStyle(color: Colors.white)),
-      ],
-    );
-  }
-
-  String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
-    final remainingSeconds = seconds % 60;
-    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 }

@@ -11,6 +11,9 @@ enum RecordingStatus {
   /// Ready to record
   ready,
 
+  /// Pre-recording calibration phase
+  calibrating,
+
   /// Currently recording
   recording,
 
@@ -41,6 +44,18 @@ class RecordingState {
   /// Duration of the recording in seconds
   final int recordingDurationSeconds;
 
+  /// Whether pre-recording calibration is complete
+  final bool isPreRecordingCalibrationComplete;
+
+  /// Session-specific Z-axis accelerometer offset (after pre-recording calibration)
+  final double? sessionAccelOffsetZ;
+
+  /// Session-specific gyroscope drift value
+  final double? gyroZDrift;
+
+  /// Session-specific bump threshold
+  final double? bumpThreshold;
+
   /// Constructor
   const RecordingState({
     this.status = RecordingStatus.initial,
@@ -48,6 +63,10 @@ class RecordingState {
     this.sessionPath,
     this.errorMessage,
     this.recordingDurationSeconds = 0,
+    this.isPreRecordingCalibrationComplete = false,
+    this.sessionAccelOffsetZ,
+    this.gyroZDrift,
+    this.bumpThreshold,
   });
 
   /// Create a copy of this state with the given fields replaced
@@ -57,6 +76,10 @@ class RecordingState {
     String? sessionPath,
     String? errorMessage,
     int? recordingDurationSeconds,
+    bool? isPreRecordingCalibrationComplete,
+    double? sessionAccelOffsetZ,
+    double? gyroZDrift,
+    double? bumpThreshold,
   }) {
     return RecordingState(
       status: status ?? this.status,
@@ -65,6 +88,12 @@ class RecordingState {
       errorMessage: errorMessage ?? this.errorMessage,
       recordingDurationSeconds:
           recordingDurationSeconds ?? this.recordingDurationSeconds,
+      isPreRecordingCalibrationComplete:
+          isPreRecordingCalibrationComplete ??
+          this.isPreRecordingCalibrationComplete,
+      sessionAccelOffsetZ: sessionAccelOffsetZ ?? this.sessionAccelOffsetZ,
+      gyroZDrift: gyroZDrift ?? this.gyroZDrift,
+      bumpThreshold: bumpThreshold ?? this.bumpThreshold,
     );
   }
 }
@@ -83,6 +112,38 @@ class RecordingStateNotifier extends StateNotifier<RecordingState> {
   /// Set the state to ready after camera initialization
   void setReady() {
     state = state.copyWith(status: RecordingStatus.ready);
+  }
+
+  /// Start pre-recording calibration phase
+  void startCalibration() {
+    state = state.copyWith(
+      status: RecordingStatus.calibrating,
+      isPreRecordingCalibrationComplete: false,
+    );
+  }
+
+  /// Complete pre-recording calibration with results
+  void completeCalibration({
+    required double sessionAccelOffsetZ,
+    required double gyroZDrift,
+    required double bumpThreshold,
+  }) {
+    state = state.copyWith(
+      status: RecordingStatus.recording,
+      isPreRecordingCalibrationComplete: true,
+      sessionAccelOffsetZ: sessionAccelOffsetZ,
+      gyroZDrift: gyroZDrift,
+      bumpThreshold: bumpThreshold,
+      recordingDurationSeconds: 0,
+    );
+  }
+
+  /// Fail pre-recording calibration
+  void failCalibration() {
+    state = state.copyWith(
+      status: RecordingStatus.ready,
+      isPreRecordingCalibrationComplete: false,
+    );
   }
 
   /// Start recording

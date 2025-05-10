@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-
+import 'package:intl/intl.dart';
+import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import '../file_storage_service.dart';
 
@@ -277,6 +278,121 @@ class FileStorageServiceImpl implements FileStorageService {
     } catch (e) {
       // Log error in a real application
       return null;
+    }
+  }
+
+  // Constants for session management
+  static const String _sessionsDirectoryName = 'RoadDataCollector';
+  static const String _sessionDateTimeFormat = 'yyyyMMdd_HHmmss';
+  static const String _videoFileName = 'video.mp4';
+
+  @override
+  Future<String> getSessionsBaseDirectory() async {
+    Directory? directory;
+    try {
+      // On Android, use the Downloads directory
+      if (Platform.isAndroid) {
+        // Get the Downloads directory
+        directory = Directory(
+          '/storage/emulated/0/Download/$_sessionsDirectoryName',
+        );
+      } else if (Platform.isIOS) {
+        // On iOS, use the Documents directory which is accessible via Files app
+        // This will be accessible through the Files app under On My iPhone/AppName
+        final docsDir = await getApplicationDocumentsDirectory();
+        directory = Directory('${docsDir.path}/$_sessionsDirectoryName');
+      } else {
+        // Fallback to app's external storage directory or documents directory
+        final appDir =
+            await getExternalStorageDirectoryPath() ??
+            await getDocumentsDirectoryPath();
+        directory = Directory('$appDir/$_sessionsDirectoryName');
+      }
+
+      // Ensure the directory exists
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+
+      return directory.path;
+    } catch (e) {
+      // If there's an error, fallback to app's documents directory
+      final appDir = await getDocumentsDirectoryPath();
+      final sessionsDir = path.join(appDir, _sessionsDirectoryName);
+
+      // Ensure the directory exists
+      await createDirectory(sessionsDir);
+
+      return sessionsDir;
+    }
+  }
+
+  @override
+  Future<String> createSessionDirectory() async {
+    // Generate a timestamp-based session name (YYYYMMDD_HHMMSS)
+    final sessionId = DateFormat(_sessionDateTimeFormat).format(DateTime.now());
+    final sessionsBaseDir = await getSessionsBaseDirectory();
+    final sessionDir = path.join(sessionsBaseDir, 'session_$sessionId');
+
+    // Create the directory
+    await createDirectory(sessionDir);
+
+    return sessionDir;
+  }
+
+  @override
+  Future<String> saveVideoToSession(
+    String videoPath,
+    String sessionDirectory,
+  ) async {
+    // Destination path for the video file
+    final videoDestinationPath = path.join(sessionDirectory, _videoFileName);
+
+    // Copy the video file to the session directory
+    await copyFile(videoPath, videoDestinationPath);
+
+    if (Platform.isIOS) {
+      // For iOS, we might need additional steps to make the video accessible
+      // in the Photos app, but this would require additional packages
+      // or native code integration, which is beyond the current scope
+
+      // The video will still be accessible via the Files app
+      // under "On My iPhone > App Name > RoadDataCollector > session_XXX"
+    }
+
+    return videoDestinationPath;
+  }
+
+  @override
+  Future<List<String>> listSessions() async {
+    final sessionsBaseDir = await getSessionsBaseDirectory();
+
+    try {
+      final directory = Directory(sessionsBaseDir);
+      if (!await directory.exists()) {
+        return [];
+      }
+
+      final List<String> sessionDirs = [];
+      await for (final entity in directory.list()) {
+        if (entity is Directory) {
+          // Only include directory names that match our session pattern
+          final dirName = path.basename(entity.path);
+          if (dirName.startsWith('session_')) {
+            sessionDirs.add(entity.path);
+          }
+        }
+      }
+
+      // Sort sessions by name (which will sort them by date due to our naming scheme)
+      sessionDirs.sort(
+        (a, b) => b.compareTo(a),
+      ); // Descending order (newest first)
+
+      return sessionDirs;
+    } catch (e) {
+      // Log error in a real application
+      return [];
     }
   }
 }

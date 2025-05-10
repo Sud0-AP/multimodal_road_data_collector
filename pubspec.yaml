@@ -52,6 +52,8 @@ dependencies:
   
   # File system access
   path_provider: ^2.1.2
+  intl: ^0.20.2
+  camera: ^0.11.1
 
 dev_dependencies:
   flutter_test:

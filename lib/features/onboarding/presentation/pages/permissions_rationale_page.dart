@@ -93,8 +93,9 @@ class PermissionsRationalePage extends StatelessWidget {
             _buildPermissionItem(
               context,
               icon: Icons.sd_storage,
-              title: 'Storage',
-              description: 'To save collected data for processing and upload',
+              title: 'Photos & Storage',
+              description:
+                  'To save recorded videos to an accessible location on your device',
               iconColor: theme.colorScheme.secondary,
             ),
 

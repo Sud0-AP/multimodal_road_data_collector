@@ -7,17 +7,20 @@ import '../core/providers/service_providers.dart';
 import '../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../features/calibration/presentation/screens/initial_calibration_screen.dart';
 import '../features/calibration/presentation/state/calibration_provider.dart';
+import '../features/recording/presentation/screens/recording_screen.dart';
 
 /// Routes names used throughout the app
 class AppRoutes {
   static const String onboarding = 'onboarding';
   static const String home = 'home';
   static const String calibration = 'calibration';
+  static const String recording = 'recording';
 
   // Path names
   static const String onboardingPath = '/onboarding';
   static const String homePath = '/';
   static const String calibrationPath = '/calibration';
+  static const String recordingPath = '/recording';
 }
 
 /// Provider for the initial onboarding status
@@ -61,6 +64,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                     onPressed: () => context.pushNamed(AppRoutes.calibration),
                     child: const Text('Calibrate Sensors'),
                   ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => context.pushNamed(AppRoutes.recording),
+                    child: const Text('Record Road Data'),
+                  ),
                 ],
               ),
             ),
@@ -76,6 +84,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.calibrationPath,
         name: AppRoutes.calibration,
         builder: (context, state) => const InitialCalibrationScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.recordingPath,
+        name: AppRoutes.recording,
+        builder: (context, state) => const RecordingScreen(),
       ),
     ],
   );

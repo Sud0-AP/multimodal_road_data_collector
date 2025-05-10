@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'camera_service.dart';
 import 'file_storage_service.dart';
+import 'implementations/camera_service_impl.dart';
 import 'implementations/file_storage_service_impl.dart';
 import 'implementations/permission_service_impl.dart';
 import 'implementations/preferences_service_impl.dart';
@@ -32,6 +34,18 @@ final sensorServiceProvider = Provider<SensorService>((ref) {
 
   // Initialize the service
   service.initialize();
+
+  // Add dispose callback
+  ref.onDispose(() {
+    service.dispose();
+  });
+
+  return service;
+});
+
+/// Provider for CameraService
+final cameraServiceProvider = Provider<CameraService>((ref) {
+  final service = CameraServiceImpl();
 
   // Add dispose callback
   ref.onDispose(() {

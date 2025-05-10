@@ -53,4 +53,18 @@ abstract class FileStorageService {
 
   /// Export file to a shareable location
   Future<String?> exportFile(String sourcePath, String fileName);
+
+  /// Create a new uniquely named session directory with timestamp (YYYYMMDD_HHMMSS format)
+  /// Returns the path to the created session directory
+  Future<String> createSessionDirectory();
+
+  /// Get the base directory where all sessions are stored
+  Future<String> getSessionsBaseDirectory();
+
+  /// Save a video file to a specific session directory
+  /// Returns the path to the saved video file
+  Future<String> saveVideoToSession(String videoPath, String sessionDirectory);
+
+  /// List all available sessions
+  Future<List<String>> listSessions();
 }

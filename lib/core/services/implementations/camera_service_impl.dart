@@ -96,6 +96,9 @@ class CameraServiceImpl implements CameraService {
   @override
   Future<void> startVideoRecording() async {
     if (!isInitialized) {
+      debugPrint(
+        '❌ CAMERA ERROR: Camera not initialized when attempting to start recording',
+      );
       throw CameraException(
         'Camera not initialized',
         'Call initialize() first',
@@ -104,12 +107,20 @@ class CameraServiceImpl implements CameraService {
 
     if (_controller!.value.isRecordingVideo) {
       // Already recording, do nothing
+      debugPrint('⚠️ CAMERA: Already recording video, ignoring start request');
       return;
     }
 
     try {
+      debugPrint(
+        '🎥 CAMERA: Starting video recording at ${DateTime.now().toIso8601String()}',
+      );
       await _controller!.startVideoRecording();
+      debugPrint('✅ CAMERA: Video recording started successfully');
     } on CameraException catch (e) {
+      debugPrint(
+        '❌ CAMERA ERROR: Failed to start video recording: ${e.code} - ${e.description}',
+      );
       _handleCameraError(e);
     }
   }
@@ -117,6 +128,9 @@ class CameraServiceImpl implements CameraService {
   @override
   Future<String> stopVideoRecording() async {
     if (!isInitialized) {
+      debugPrint(
+        '❌ CAMERA ERROR: Camera not initialized when attempting to stop recording',
+      );
       throw CameraException(
         'Camera not initialized',
         'Call initialize() first',
@@ -124,13 +138,37 @@ class CameraServiceImpl implements CameraService {
     }
 
     if (!_controller!.value.isRecordingVideo) {
+      debugPrint('❌ CAMERA ERROR: Not recording video when stop was requested');
       throw CameraException('Not recording', 'No active recording to stop');
     }
 
     try {
+      debugPrint(
+        '🎥 CAMERA: Stopping video recording at ${DateTime.now().toIso8601String()}',
+      );
       final XFile videoFile = await _controller!.stopVideoRecording();
+
+      // Get file size
+      final file = File(videoFile.path);
+      if (await file.exists()) {
+        final size = await file.length();
+        debugPrint(
+          '✅ CAMERA: Video recording stopped successfully. File: ${videoFile.path}',
+        );
+        debugPrint(
+          '📊 CAMERA: Recorded video file size: ${(size / 1024 / 1024).toStringAsFixed(2)} MB',
+        );
+      } else {
+        debugPrint(
+          '⚠️ CAMERA: Video file does not exist after recording: ${videoFile.path}',
+        );
+      }
+
       return videoFile.path;
     } on CameraException catch (e) {
+      debugPrint(
+        '❌ CAMERA ERROR: Failed to stop video recording: ${e.code} - ${e.description}',
+      );
       _handleCameraError(e);
       return '';
     }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../features/calibration/presentation/state/calibration_provider.dart';
 import '../../domain/managers/recording_session_manager.dart';
+import '../providers/recording_lifecycle_provider.dart';
 import '../state/recording_state.dart';
 import '../state/pre_recording_calibration_state.dart';
 import '../widgets/pre_recording_calibration_overlay.dart';
@@ -225,13 +227,26 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   Future<void> _startRecording() async {
     try {
       final notifier = ref.read(recordingStateProvider.notifier);
+      final lifecycleNotifier = ref.read(recordingLifecycleProvider.notifier);
 
-      // Start sensor data collection if not already started during calibration
+      // Create a session directory for this recording
+      final sessionDir = await _fileStorageService.createSessionDirectory();
+      debugPrint('📁 RECORDING: Created session directory: $sessionDir');
+
+      // Update recording state with session path
+      notifier.setSessionPath(sessionDir);
+
+      debugPrint(
+        '🎬 VIDEO: Starting recording session at ${DateTime.now().toIso8601String()}',
+      );
+
+      // Start the recording session using the lifecycle-aware provider
+      // This ensures proper handling of app lifecycle events
+      await lifecycleNotifier.startRecording(sessionDir);
+
+      // Set up a subscription to process sensor data if needed
+      // This might be used later for UI feedback during recording
       if (_isSensorInitialized) {
-        await _recordingSessionManager.startSensorDataCollection();
-
-        // Set up a subscription to process sensor data if needed
-        // This might be used later for UI feedback during recording
         _sensorDataSubscription = _recordingSessionManager
             .getProcessedSensorStream()
             .listen(_handleSensorData);
@@ -239,6 +254,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
       // Start video recording
       await _cameraService.startVideoRecording();
+      debugPrint(
+        '🎥 VIDEO: Recording started at ${DateTime.now().toIso8601String()}',
+      );
+
       notifier.startRecording();
 
       // Start a timer to update recording duration
@@ -246,6 +265,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         notifier.updateDuration(timer.tick);
       });
     } catch (e) {
+      debugPrint('❌ ERROR starting recording: $e');
       ref
           .read(recordingStateProvider.notifier)
           .setError('Error starting recording: $e');
@@ -254,12 +274,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
   void _handleSensorData(ProcessedSensorData data) {
     // We can use this to update UI based on sensor data
-    // For example, show bump indicators when a bump is detected
-    if (data.isBumpDetected) {
-      // You could update UI to show a bump was detected
-      // This could be a temporary visual indicator
-      debugPrint('Bump detected: ${data.accelMagnitude}');
-    }
+    // Pothole detection is currently disabled as per user request
+
+    // Debug info about accelerometer data
+    // Use this for debug purposes only
+    // if (data.accelMagnitude > 15.0) {  // Higher threshold just for extreme values
+    //   debugPrint('High acceleration detected: ${data.accelMagnitude}');
+    // }
   }
 
   // Stop recording
@@ -269,29 +290,80 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       _recordingTimer?.cancel();
       _recordingTimer = null;
 
-      // Stop sensor data collection
-      if (_isSensorInitialized &&
-          _recordingSessionManager.isDataCollectionActive()) {
-        await _recordingSessionManager.stopSensorDataCollection();
-        // Reset session-specific calibration parameters
-        _recordingSessionManager.clearSessionCalibrationParameters();
-        // Cancel sensor data subscription
-        await _sensorDataSubscription?.cancel();
-        _sensorDataSubscription = null;
-      }
-
-      // Stop video recording
-      final videoPath = await _cameraService.stopVideoRecording();
-      ref.read(recordingStateProvider.notifier).stopRecording(videoPath);
-
-      // Create a session directory and save the video
-      final sessionDir = await _fileStorageService.createSessionDirectory();
-      final savedPath = await _fileStorageService.saveVideoToSession(
-        videoPath,
-        sessionDir,
+      debugPrint(
+        '🎬 VIDEO: Stopping recording at ${DateTime.now().toIso8601String()}',
       );
 
-      ref.read(recordingStateProvider.notifier).saveRecording(sessionDir);
+      // Get the current session directory before stopping the recording
+      // This will prevent the "No session directory available" error
+      final recordingState = ref.read(recordingStateProvider);
+      final sessionDir = recordingState.sessionPath;
+      if (sessionDir == null) {
+        debugPrint('⚠️ Warning: No session directory in state, creating one');
+        // If session directory is null, get it from the recording manager
+        // or create one as a fallback
+        final sessionDirectory =
+            await _fileStorageService.createSessionDirectory();
+        ref
+            .read(recordingStateProvider.notifier)
+            .setSessionPath(sessionDirectory);
+        debugPrint(
+          '📁 RECORDING: Created fallback session directory: $sessionDirectory',
+        );
+      }
+
+      // Stop the recording using the lifecycle-aware provider
+      final lifecycleNotifier = ref.read(recordingLifecycleProvider.notifier);
+      await lifecycleNotifier.stopRecording();
+
+      // Cancel sensor data subscription
+      await _sensorDataSubscription?.cancel();
+      _sensorDataSubscription = null;
+
+      // Stop video recording
+      debugPrint('🎥 VIDEO: Stopping video recording...');
+      final videoPath = await _cameraService.stopVideoRecording();
+      debugPrint(
+        '🎥 VIDEO: Recording stopped at ${DateTime.now().toIso8601String()}',
+      );
+      debugPrint('🎥 VIDEO: Temporary video path: $videoPath');
+
+      ref.read(recordingStateProvider.notifier).stopRecording(videoPath);
+
+      // Get the session directory again in case it was updated
+      final updatedSessionDir = ref.read(recordingStateProvider).sessionPath;
+      if (updatedSessionDir == null) {
+        throw Exception(
+          'No session directory available after stopping recording',
+        );
+      }
+
+      // Save the video to the session directory
+      debugPrint(
+        '🎥 VIDEO: Saving video from $videoPath to $updatedSessionDir',
+      );
+      final savedPath = await _fileStorageService.saveVideoToSession(
+        videoPath,
+        updatedSessionDir,
+      );
+
+      // Verify the saved video exists
+      final savedFile = File(savedPath);
+      final exists = await savedFile.exists();
+      if (!exists) {
+        debugPrint(
+          '❌ ERROR: Saved video file does not exist at path: $savedPath',
+        );
+      } else {
+        final size = await savedFile.length();
+        debugPrint(
+          '✅ VIDEO: Saved successfully at: $savedPath (${(size / 1024 / 1024).toStringAsFixed(2)} MB)',
+        );
+      }
+
+      ref
+          .read(recordingStateProvider.notifier)
+          .saveRecording(updatedSessionDir);
 
       // Show success message
       if (mounted) {
@@ -302,7 +374,33 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           ),
         );
       }
+
+      // Verify that both video and CSV files are in the same directory
+      final videoFile = File(savedPath);
+      final videoDir = videoFile.parent.path;
+
+      // Get the CSV file path
+      final csvPath = await _fileStorageService.getSensorDataCsvPath(
+        updatedSessionDir,
+      );
+      final csvFile = File(csvPath);
+      final csvExists = await csvFile.exists();
+
+      debugPrint('📊 VERIFICATION: Video directory: $videoDir');
+      debugPrint('📊 VERIFICATION: CSV path: $csvPath');
+      debugPrint('📊 VERIFICATION: CSV exists: $csvExists');
+
+      if (csvExists) {
+        final csvSize = await csvFile.length();
+        debugPrint(
+          '📊 VERIFICATION: CSV file size: ${(csvSize / 1024).toStringAsFixed(2)} KB',
+        );
+        debugPrint(
+          '📊 VERIFICATION: CSV contains approximately ${csvSize ~/ 100} data points',
+        );
+      }
     } catch (e) {
+      debugPrint('❌ ERROR stopping recording: $e');
       ref
           .read(recordingStateProvider.notifier)
           .setError('Error stopping recording: $e');
@@ -314,6 +412,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     final recordingState = ref.watch(recordingStateProvider);
     final calibrationNeeded = ref.watch(calibrationNeededProvider);
     final calibrationCompleted = ref.watch(calibrationCompletedProvider);
+    // Watch the recording lifecycle state to ensure the UI stays in sync
+    final isRecording = ref.watch(recordingLifecycleProvider);
 
     return Scaffold(
       // Using a transparent AppBar to get full screen camera view

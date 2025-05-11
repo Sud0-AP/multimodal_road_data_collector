@@ -12,6 +12,8 @@ import 'package:multimodal_road_data_collector/core/services/camera_service.dart
 import 'package:multimodal_road_data_collector/core/services/file_storage_service.dart'
     as _i5;
 import 'package:multimodal_road_data_collector/core/services/permission_service.dart'
+    as _i7;
+import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart'
     as _i6;
 
 // ignore_for_file: type=lint
@@ -325,12 +327,69 @@ class MockFileStorageService extends _i1.Mock
             returnValue: _i3.Future<List<String>>.value(<String>[]),
           )
           as _i3.Future<List<String>>);
+
+  @override
+  _i3.Future<bool> createCsvWithHeader(
+    String? filePath,
+    List<String>? headerColumns,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#createCsvWithHeader, [filePath, headerColumns]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> appendToCsv(String? filePath, List<String>? rows) =>
+      (super.noSuchMethod(
+            Invocation.method(#appendToCsv, [filePath, rows]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<String> getSensorDataCsvPath(
+    String? sessionDirectory, {
+    bool? createIfNotExists = false,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #getSensorDataCsvPath,
+              [sessionDirectory],
+              {#createIfNotExists: createIfNotExists},
+            ),
+            returnValue: _i3.Future<String>.value(
+              _i4.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #getSensorDataCsvPath,
+                  [sessionDirectory],
+                  {#createIfNotExists: createIfNotExists},
+                ),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
+  _i3.Future<bool> appendToSensorDataCsv(
+    String? sessionDirectory,
+    List<_i6.CorrectedSensorDataPoint>? dataPoints,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#appendToSensorDataCsv, [
+              sessionDirectory,
+              dataPoints,
+            ]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
 }
 
 /// A class which mocks [PermissionService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockPermissionService extends _i1.Mock implements _i6.PermissionService {
+class MockPermissionService extends _i1.Mock implements _i7.PermissionService {
   MockPermissionService() {
     _i1.throwOnMissingStub(this);
   }

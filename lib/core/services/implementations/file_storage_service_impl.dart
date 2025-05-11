@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import '../file_storage_service.dart';
+import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart';
 
 /// Implementation of FileStorageService using dart:io and path_provider
 class FileStorageServiceImpl implements FileStorageService {
@@ -348,8 +349,31 @@ class FileStorageServiceImpl implements FileStorageService {
     // Destination path for the video file
     final videoDestinationPath = path.join(sessionDirectory, _videoFileName);
 
+    print('🎥 VIDEO SAVE: Source path: $videoPath');
+    print('🎥 VIDEO SAVE: Destination directory: $sessionDirectory');
+    print('🎥 VIDEO SAVE: Full destination path: $videoDestinationPath');
+
+    // Make sure the destination directory exists
+    await createDirectory(sessionDirectory);
+
     // Copy the video file to the session directory
-    await copyFile(videoPath, videoDestinationPath);
+    final success = await copyFile(videoPath, videoDestinationPath);
+
+    if (success) {
+      print('✅ VIDEO SAVE: Successfully saved video to $videoDestinationPath');
+      // Check file size to verify the video was copied correctly
+      final videoFile = File(videoDestinationPath);
+      if (await videoFile.exists()) {
+        final size = await videoFile.length();
+        print(
+          '✅ VIDEO SAVE: Video file size: ${(size / 1024 / 1024).toStringAsFixed(2)} MB',
+        );
+      } else {
+        print('❌ VIDEO SAVE: Destination file does not exist after copy!');
+      }
+    } else {
+      print('❌ VIDEO SAVE: Failed to copy video to session directory');
+    }
 
     if (Platform.isIOS) {
       // For iOS, we might need additional steps to make the video accessible
@@ -384,15 +408,119 @@ class FileStorageServiceImpl implements FileStorageService {
         }
       }
 
-      // Sort sessions by name (which will sort them by date due to our naming scheme)
-      sessionDirs.sort(
-        (a, b) => b.compareTo(a),
-      ); // Descending order (newest first)
+      // Sort in descending order by creation time for convenience
+      sessionDirs.sort((a, b) => b.compareTo(a));
 
       return sessionDirs;
     } catch (e) {
       // Log error in a real application
       return [];
+    }
+  }
+
+  /// Constants for sensor data CSV
+  static const String _sensorDataFileName = 'sensors.csv';
+
+  /// List of column headers for the sensor data CSV file
+  static const List<String> _sensorDataCsvColumns = [
+    'timestamp_ms',
+    'accel_x',
+    'accel_y',
+    'accel_z',
+    'accel_magnitude',
+    'gyro_x',
+    'gyro_y',
+    'gyro_z',
+    'is_pothole',
+    'user_feedback',
+  ];
+
+  @override
+  Future<bool> createCsvWithHeader(
+    String filePath,
+    List<String> headerColumns,
+  ) async {
+    try {
+      final file = File(filePath);
+
+      // Create the parent directory if it doesn't exist
+      final dir = file.parent;
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      // Create the CSV header row
+      final headerRow = headerColumns.join(',');
+
+      // Write the header to the file
+      await file.writeAsString('$headerRow\n');
+      return true;
+    } catch (e) {
+      // Log error in a real application
+      print('Error creating CSV with header: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> appendToCsv(String filePath, List<String> rows) async {
+    try {
+      final file = File(filePath);
+
+      // Check if file exists
+      if (!await file.exists()) {
+        return false;
+      }
+
+      // Join rows with newlines and append to file
+      final content = rows.join('\n') + '\n';
+      await file.writeAsString(content, mode: FileMode.append);
+      return true;
+    } catch (e) {
+      // Log error in a real application
+      print('Error appending to CSV: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<String> getSensorDataCsvPath(
+    String sessionDirectory, {
+    bool createIfNotExists = false,
+  }) async {
+    final csvPath = path.join(sessionDirectory, _sensorDataFileName);
+
+    if (createIfNotExists) {
+      final fileExists = await this.fileExists(csvPath);
+      if (!fileExists) {
+        await createCsvWithHeader(csvPath, _sensorDataCsvColumns);
+      }
+    }
+
+    return csvPath;
+  }
+
+  @override
+  Future<bool> appendToSensorDataCsv(
+    String sessionDirectory,
+    List<CorrectedSensorDataPoint> dataPoints,
+  ) async {
+    try {
+      // Get the CSV file path, creating it if needed
+      final csvPath = await getSensorDataCsvPath(
+        sessionDirectory,
+        createIfNotExists: true,
+      );
+
+      // Convert data points to CSV rows
+      final rows = dataPoints.map((point) => point.toCsvRow()).toList();
+
+      // Append rows to the CSV file
+      return await appendToCsv(csvPath, rows);
+    } catch (e) {
+      // Log error in a real application
+      print('Error appending to sensor data CSV: $e');
+      return false;
     }
   }
 }

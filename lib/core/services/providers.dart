@@ -7,9 +7,11 @@ import 'implementations/file_storage_service_impl.dart';
 import 'implementations/permission_service_impl.dart';
 import 'implementations/preferences_service_impl.dart';
 import 'implementations/sensor_service_impl.dart';
+import 'implementations/ntp_service_impl.dart';
 import 'permission_service.dart';
 import 'preferences_service.dart';
 import 'sensor_service.dart';
+import 'ntp_service.dart';
 
 /// Provider for PermissionService
 final permissionServiceProvider = Provider<PermissionService>((ref) {
@@ -46,6 +48,21 @@ final sensorServiceProvider = Provider<SensorService>((ref) {
 /// Provider for CameraService
 final cameraServiceProvider = Provider<CameraService>((ref) {
   final service = CameraServiceImpl();
+
+  // Add dispose callback
+  ref.onDispose(() {
+    service.dispose();
+  });
+
+  return service;
+});
+
+/// Provider for NtpService
+final ntpServiceProvider = Provider<NtpService>((ref) {
+  final service = NtpServiceImpl();
+
+  // Initialize the service
+  service.initialize();
 
   // Add dispose callback
   ref.onDispose(() {

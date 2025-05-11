@@ -8,6 +8,10 @@ import 'dart:io' as _i2;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i3;
+import 'package:multimodal_road_data_collector/core/services/file_storage_service.dart'
+    as _i5;
+import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart'
+    as _i6;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -271,4 +275,279 @@ class MockDirectory extends _i1.Mock implements _i2.Directory {
             returnValue: _i4.Stream<_i2.FileSystemEvent>.empty(),
           )
           as _i4.Stream<_i2.FileSystemEvent>);
+}
+
+/// A class which mocks [FileStorageService].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockFileStorageService extends _i1.Mock
+    implements _i5.FileStorageService {
+  MockFileStorageService() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i4.Future<String> getDocumentsDirectoryPath() =>
+      (super.noSuchMethod(
+            Invocation.method(#getDocumentsDirectoryPath, []),
+            returnValue: _i4.Future<String>.value(
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#getDocumentsDirectoryPath, []),
+              ),
+            ),
+          )
+          as _i4.Future<String>);
+
+  @override
+  _i4.Future<String> getTemporaryDirectoryPath() =>
+      (super.noSuchMethod(
+            Invocation.method(#getTemporaryDirectoryPath, []),
+            returnValue: _i4.Future<String>.value(
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#getTemporaryDirectoryPath, []),
+              ),
+            ),
+          )
+          as _i4.Future<String>);
+
+  @override
+  _i4.Future<String?> getExternalStorageDirectoryPath() =>
+      (super.noSuchMethod(
+            Invocation.method(#getExternalStorageDirectoryPath, []),
+            returnValue: _i4.Future<String?>.value(),
+          )
+          as _i4.Future<String?>);
+
+  @override
+  _i4.Future<bool> writeStringToFile(String? content, String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#writeStringToFile, [content, filePath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<String?> readStringFromFile(String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#readStringFromFile, [filePath]),
+            returnValue: _i4.Future<String?>.value(),
+          )
+          as _i4.Future<String?>);
+
+  @override
+  _i4.Future<bool> writeBytesToFile(List<int>? bytes, String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#writeBytesToFile, [bytes, filePath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<List<int>?> readBytesFromFile(String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#readBytesFromFile, [filePath]),
+            returnValue: _i4.Future<List<int>?>.value(),
+          )
+          as _i4.Future<List<int>?>);
+
+  @override
+  _i4.Future<bool> fileExists(String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#fileExists, [filePath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<bool> deleteFile(String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteFile, [filePath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<bool> createDirectory(String? directoryPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#createDirectory, [directoryPath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<List<String>> listFiles(String? directoryPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#listFiles, [directoryPath]),
+            returnValue: _i4.Future<List<String>>.value(<String>[]),
+          )
+          as _i4.Future<List<String>>);
+
+  @override
+  _i4.Future<List<String>> listFilesWithExtension(
+    String? directoryPath,
+    String? extension,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#listFilesWithExtension, [
+              directoryPath,
+              extension,
+            ]),
+            returnValue: _i4.Future<List<String>>.value(<String>[]),
+          )
+          as _i4.Future<List<String>>);
+
+  @override
+  _i4.Future<bool> copyFile(String? sourcePath, String? destinationPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#copyFile, [sourcePath, destinationPath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<bool> moveFile(String? sourcePath, String? destinationPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#moveFile, [sourcePath, destinationPath]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<int?> getFileSize(String? filePath) =>
+      (super.noSuchMethod(
+            Invocation.method(#getFileSize, [filePath]),
+            returnValue: _i4.Future<int?>.value(),
+          )
+          as _i4.Future<int?>);
+
+  @override
+  _i4.Future<int?> getAvailableStorage() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAvailableStorage, []),
+            returnValue: _i4.Future<int?>.value(),
+          )
+          as _i4.Future<int?>);
+
+  @override
+  _i4.Future<String?> exportFile(String? sourcePath, String? fileName) =>
+      (super.noSuchMethod(
+            Invocation.method(#exportFile, [sourcePath, fileName]),
+            returnValue: _i4.Future<String?>.value(),
+          )
+          as _i4.Future<String?>);
+
+  @override
+  _i4.Future<String> createSessionDirectory() =>
+      (super.noSuchMethod(
+            Invocation.method(#createSessionDirectory, []),
+            returnValue: _i4.Future<String>.value(
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#createSessionDirectory, []),
+              ),
+            ),
+          )
+          as _i4.Future<String>);
+
+  @override
+  _i4.Future<String> getSessionsBaseDirectory() =>
+      (super.noSuchMethod(
+            Invocation.method(#getSessionsBaseDirectory, []),
+            returnValue: _i4.Future<String>.value(
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#getSessionsBaseDirectory, []),
+              ),
+            ),
+          )
+          as _i4.Future<String>);
+
+  @override
+  _i4.Future<String> saveVideoToSession(
+    String? videoPath,
+    String? sessionDirectory,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#saveVideoToSession, [
+              videoPath,
+              sessionDirectory,
+            ]),
+            returnValue: _i4.Future<String>.value(
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(#saveVideoToSession, [
+                  videoPath,
+                  sessionDirectory,
+                ]),
+              ),
+            ),
+          )
+          as _i4.Future<String>);
+
+  @override
+  _i4.Future<List<String>> listSessions() =>
+      (super.noSuchMethod(
+            Invocation.method(#listSessions, []),
+            returnValue: _i4.Future<List<String>>.value(<String>[]),
+          )
+          as _i4.Future<List<String>>);
+
+  @override
+  _i4.Future<bool> createCsvWithHeader(
+    String? filePath,
+    List<String>? headerColumns,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#createCsvWithHeader, [filePath, headerColumns]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<bool> appendToCsv(String? filePath, List<String>? rows) =>
+      (super.noSuchMethod(
+            Invocation.method(#appendToCsv, [filePath, rows]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
+
+  @override
+  _i4.Future<String> getSensorDataCsvPath(
+    String? sessionDirectory, {
+    bool? createIfNotExists = false,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #getSensorDataCsvPath,
+              [sessionDirectory],
+              {#createIfNotExists: createIfNotExists},
+            ),
+            returnValue: _i4.Future<String>.value(
+              _i3.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #getSensorDataCsvPath,
+                  [sessionDirectory],
+                  {#createIfNotExists: createIfNotExists},
+                ),
+              ),
+            ),
+          )
+          as _i4.Future<String>);
+
+  @override
+  _i4.Future<bool> appendToSensorDataCsv(
+    String? sessionDirectory,
+    List<_i6.CorrectedSensorDataPoint>? dataPoints,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#appendToSensorDataCsv, [
+              sessionDirectory,
+              dataPoints,
+            ]),
+            returnValue: _i4.Future<bool>.value(false),
+          )
+          as _i4.Future<bool>);
 }

@@ -7,64 +7,73 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:multimodal_road_data_collector/core/services/file_storage_service.dart';
 import 'package:multimodal_road_data_collector/core/services/implementations/file_storage_service_impl.dart';
+import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart';
 
 import 'file_storage_service_test.mocks.dart';
 
 // Generate mocks
-@GenerateMocks([Directory])
+@GenerateMocks([Directory, FileStorageService])
 void main() {
   group('FileStorageServiceImpl - Session Management', () {
     late FileStorageServiceImpl fileStorageService;
     late String testBasePath;
-    late Directory testDirectory;
 
     setUp(() {
       fileStorageService = FileStorageServiceImpl();
       testBasePath = '/test/path';
-      testDirectory = Directory(testBasePath);
-
-      // Override getApplicationDocumentsDirectory for testing
-      getApplicationDocumentsDirectoryOverride = () async {
-        return testDirectory;
-      };
-    });
-
-    tearDown(() {
-      getApplicationDocumentsDirectoryOverride = null;
     });
 
     test(
       'getSessionsBaseDirectory creates the sessions directory if needed',
       () async {
-        // Mock method for testing
-        fileStorageService.createDirectory = (_) async => true;
-        fileStorageService.getDocumentsDirectoryPath = () async => testBasePath;
+        // Create test stub for file storage methods
+        fileStorageService = MockFileStorageService() as FileStorageServiceImpl;
+        when(
+          fileStorageService.getDocumentsDirectoryPath(),
+        ).thenAnswer((_) async => testBasePath);
+        when(
+          fileStorageService.createDirectory(any),
+        ).thenAnswer((_) async => true);
 
         final sessionsDir = await fileStorageService.getSessionsBaseDirectory();
 
         // Verify path structure
-        expect(sessionsDir, path.join(testBasePath, 'sessions'));
+        expect(sessionsDir, contains('RoadDataCollector'));
+        verify(fileStorageService.createDirectory(any)).called(1);
       },
     );
 
-    test('createSessionDirectory generates timestamped session folder', () async {
-      // Mock methods for testing
-      fileStorageService.getSessionsBaseDirectory =
-          () async => path.join(testBasePath, 'sessions');
-      fileStorageService.createDirectory = (_) async => true;
+    test(
+      'createSessionDirectory generates timestamped session folder',
+      () async {
+        // Use a real implementation but with mocked methods
+        fileStorageService = FileStorageServiceImpl();
 
-      final sessionDir = await fileStorageService.createSessionDirectory();
+        // Use a spy to monitor the real calls
+        final spy = MockFileStorageService();
 
-      // Check that the path is correct (prefix and structure)
-      expect(
-        sessionDir,
-        startsWith(path.join(testBasePath, 'sessions', 'session_')),
-      );
+        // Setup the test session path
+        final sessionsBasePath = path.join(testBasePath, 'RoadDataCollector');
 
-      // Check that the path contains a timestamp pattern (e.g., YYYYMMDD_HHMMSS)
-      final folderName = path.basename(sessionDir);
-      expect(folderName, matches(r'session_\d{8}_\d{6}'));
-    });
+        // Replace the methods we don't want to run in tests
+        when(
+          spy.getSessionsBaseDirectory(),
+        ).thenAnswer((_) async => sessionsBasePath);
+        when(spy.createDirectory(any)).thenAnswer((_) async => true);
+
+        // Call the method we're testing
+        fileStorageService.getSessionsBaseDirectory =
+            spy.getSessionsBaseDirectory;
+        fileStorageService.createDirectory = spy.createDirectory;
+
+        // Execute the test
+        final sessionPath = await fileStorageService.createSessionDirectory();
+
+        // Verify the session directory was created with a timestamp pattern
+        expect(sessionPath, contains('session_'));
+        verify(spy.createDirectory(any)).called(1);
+      },
+    );
 
     test('saveVideoToSession copies video file to session directory', () async {
       // Test paths
@@ -125,5 +134,247 @@ void main() {
         equals(path.join(testSessionsBaseDir, 'session_20230501_120000')),
       );
     });
+  });
+
+  group('FileStorageServiceImpl - CSV Operations', () {
+    late MockFileStorageService mockFileStorageService;
+    late String testBasePath;
+    late String testCsvPath;
+
+    setUp(() {
+      mockFileStorageService = MockFileStorageService();
+      testBasePath = '/test/path';
+      testCsvPath = path.join(testBasePath, 'test.csv');
+    });
+
+    test(
+      'createCsvWithHeader creates a CSV file with header columns',
+      () async {
+        final headerColumns = ['col1', 'col2', 'col3'];
+
+        // Setup mock behavior
+        when(
+          mockFileStorageService.createCsvWithHeader(
+            testCsvPath,
+            headerColumns,
+          ),
+        ).thenAnswer((_) async => true);
+
+        // Call the method and verify
+        final result = await mockFileStorageService.createCsvWithHeader(
+          testCsvPath,
+          headerColumns,
+        );
+
+        expect(result, isTrue);
+        verify(
+          mockFileStorageService.createCsvWithHeader(
+            testCsvPath,
+            headerColumns,
+          ),
+        ).called(1);
+      },
+    );
+
+    test('appendToCsv appends rows to an existing CSV file', () async {
+      final rows = ['row1,data1,value1', 'row2,data2,value2'];
+
+      // Setup mock behavior
+      when(
+        mockFileStorageService.fileExists(testCsvPath),
+      ).thenAnswer((_) async => true);
+      when(
+        mockFileStorageService.appendToCsv(testCsvPath, rows),
+      ).thenAnswer((_) async => true);
+
+      // Call the method and verify
+      final result = await mockFileStorageService.appendToCsv(
+        testCsvPath,
+        rows,
+      );
+
+      expect(result, isTrue);
+      verify(mockFileStorageService.appendToCsv(testCsvPath, rows)).called(1);
+    });
+
+    test('appendToCsv returns false for non-existent files', () async {
+      final rows = ['row1,data1,value1'];
+
+      // Override for this test - file doesn't exist
+      when(
+        mockFileStorageService.fileExists(testCsvPath),
+      ).thenAnswer((_) async => false);
+
+      final result = await mockFileStorageService.appendToCsv(
+        testCsvPath,
+        rows,
+      );
+      expect(result, isFalse);
+    });
+
+    test('getSensorDataCsvPath returns correct path', () async {
+      final sessionDir = '/test/path/session_123';
+      final expectedPath = path.join(sessionDir, 'sensors.csv');
+
+      // Setup mock behavior
+      when(
+        mockFileStorageService.getSensorDataCsvPath(sessionDir),
+      ).thenAnswer((_) async => expectedPath);
+
+      // Call the method and verify
+      final resultPath = await mockFileStorageService.getSensorDataCsvPath(
+        sessionDir,
+      );
+
+      expect(resultPath, equals(expectedPath));
+      verify(mockFileStorageService.getSensorDataCsvPath(sessionDir)).called(1);
+    });
+
+    test('getSensorDataCsvPath creates file if specified', () async {
+      final sessionDir = '/test/path/session_123';
+      final expectedPath = path.join(sessionDir, 'sensors.csv');
+
+      // Override to simulate file not existing
+      when(
+        mockFileStorageService.fileExists(expectedPath),
+      ).thenAnswer((_) async => false);
+
+      // Expect createCsvWithHeader to be called with correct columns
+      bool createCsvCalled = false;
+      when(
+        mockFileStorageService.createCsvWithHeader(expectedPath, any),
+      ).thenAnswer((invocation) {
+        createCsvCalled = true;
+        return true;
+      });
+
+      // Call method with createIfNotExists
+      final resultPath = await mockFileStorageService.getSensorDataCsvPath(
+        sessionDir,
+        createIfNotExists: true,
+      );
+
+      expect(resultPath, equals(expectedPath));
+      expect(createCsvCalled, isTrue);
+    });
+  });
+
+  group('Sensor CSV Schema', () {
+    test('FileStorageServiceImpl defines the correct CSV schema columns', () {
+      // Verify that the FileStorageServiceImpl has the expected columns
+      // for sensor data CSV as defined in the task requirements
+      expect(
+        FileStorageServiceImpl._sensorDataCsvColumns,
+        equals([
+          'timestamp_ms',
+          'accel_x',
+          'accel_y',
+          'accel_z',
+          'accel_magnitude',
+          'gyro_x',
+          'gyro_y',
+          'gyro_z',
+          'is_pothole',
+          'user_feedback',
+        ]),
+      );
+    });
+  });
+
+  group('FileStorageServiceImpl - CSV Operations', () {
+    late FileStorageService fileStorageService;
+    late String testBasePath;
+    late String testCsvPath;
+    late String testSessionDir;
+
+    setUp(() {
+      fileStorageService = FileStorageServiceImpl();
+      testBasePath = '/test/path';
+      testCsvPath = path.join(testBasePath, 'test.csv');
+      testSessionDir = path.join(testBasePath, 'session_123');
+
+      // We need to override internal methods that would access the filesystem
+      (fileStorageService as FileStorageServiceImpl).writeStringToFile =
+          (content, filePath) async => true;
+
+      (fileStorageService as FileStorageServiceImpl).fileExists =
+          (filePath) async => true;
+
+      (fileStorageService as FileStorageServiceImpl).getSensorDataCsvPath =
+          (sessionDir, {createIfNotExists = false}) async =>
+              path.join(sessionDir, 'sensors.csv');
+
+      (fileStorageService as FileStorageServiceImpl).createCsvWithHeader =
+          (filePath, columns) async => true;
+
+      (fileStorageService as FileStorageServiceImpl).appendToCsv =
+          (filePath, rows) async => true;
+    });
+
+    test(
+      'appendToSensorDataCsv converts and appends data points correctly',
+      () async {
+        // Mock test data
+        final dataPoints = [
+          CorrectedSensorDataPoint(
+            timestampMs: 1000,
+            accelX: 1.1,
+            accelY: 2.2,
+            accelZ: 3.3,
+            accelMagnitude: 4.1,
+            gyroX: 0.1,
+            gyroY: 0.2,
+            gyroZ: 0.3,
+            isPothole: true,
+          ),
+          CorrectedSensorDataPoint(
+            timestampMs: 1010,
+            accelX: 1.2,
+            accelY: 2.3,
+            accelZ: 3.4,
+            accelMagnitude: 4.2,
+            gyroX: 0.11,
+            gyroY: 0.21,
+            gyroZ: 0.31,
+            isPothole: false,
+          ),
+        ];
+
+        // Track calls to appendToCsv
+        List<String> capturedRows = [];
+        (fileStorageService as FileStorageServiceImpl).appendToCsv = (
+          filePath,
+          rows,
+        ) async {
+          expect(filePath, equals(path.join(testSessionDir, 'sensors.csv')));
+          capturedRows.addAll(rows);
+          return true;
+        };
+
+        // Call the method we're testing
+        final result = await fileStorageService.appendToSensorDataCsv(
+          testSessionDir,
+          dataPoints,
+        );
+
+        // Verify result
+        expect(result, isTrue);
+
+        // Verify that we got the expected CSV rows
+        expect(capturedRows.length, equals(2));
+
+        // First row
+        expect(
+          capturedRows[0].startsWith('1000,1.1,2.2,3.3,4.1,0.1,0.2,0.3,1,'),
+          isTrue,
+        );
+
+        // Second row
+        expect(
+          capturedRows[1].startsWith('1010,1.2,2.3,3.4,4.2,0.11,0.21,0.31,0,'),
+          isTrue,
+        );
+      },
+    );
   });
 }

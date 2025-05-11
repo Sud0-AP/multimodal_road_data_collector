@@ -1,4 +1,6 @@
 /// Interface for managing files on the device
+import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart';
+
 abstract class FileStorageService {
   /// Get the application documents directory path
   Future<String> getDocumentsDirectoryPath();
@@ -67,4 +69,29 @@ abstract class FileStorageService {
 
   /// List all available sessions
   Future<List<String>> listSessions();
+
+  /// Create a new CSV file with header row
+  /// If the file already exists, it will be overwritten
+  /// Returns true if file was created successfully
+  Future<bool> createCsvWithHeader(String filePath, List<String> headerColumns);
+
+  /// Append data rows to an existing CSV file
+  /// Returns true if data was written successfully
+  Future<bool> appendToCsv(String filePath, List<String> rows);
+
+  /// Get the path to the sensor data CSV file for a specific session
+  /// If createIfNotExists is true, it will create the csv file with the appropriate header
+  /// Returns the full path to the sensors.csv file
+  Future<String> getSensorDataCsvPath(
+    String sessionDirectory, {
+    bool createIfNotExists = false,
+  });
+
+  /// Appends a list of CorrectedSensorDataPoint objects to the sensors.csv file for a specific session
+  /// If the file doesn't exist, it will be created with the appropriate header
+  /// Returns true if data was successfully written to the file
+  Future<bool> appendToSensorDataCsv(
+    String sessionDirectory,
+    List<CorrectedSensorDataPoint> dataPoints,
+  );
 }

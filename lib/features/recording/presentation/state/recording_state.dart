@@ -175,6 +175,11 @@ class RecordingStateNotifier extends StateNotifier<RecordingState> {
     );
   }
 
+  /// Set session path directly
+  void setSessionPath(String sessionPath) {
+    state = state.copyWith(sessionPath: sessionPath);
+  }
+
   /// Set error state
   void setError(String message) {
     state = state.copyWith(

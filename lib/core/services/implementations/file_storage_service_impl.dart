@@ -488,13 +488,27 @@ class FileStorageServiceImpl implements FileStorageService {
     String sessionDirectory, {
     bool createIfNotExists = false,
   }) async {
-    final csvPath = path.join(sessionDirectory, _sensorDataFileName);
+    // Ensure sessionDirectory exists
+    await createDirectory(sessionDirectory);
 
-    if (createIfNotExists) {
-      final fileExists = await this.fileExists(csvPath);
-      if (!fileExists) {
-        await createCsvWithHeader(csvPath, _sensorDataCsvColumns);
-      }
+    // Define the path to sensors.csv in the session directory
+    final csvPath = path.join(sessionDirectory, 'sensors.csv');
+
+    // Create the file with headers if needed
+    if (createIfNotExists && !await fileExists(csvPath)) {
+      final headers = [
+        'timestamp_ms',
+        'accel_x',
+        'accel_y',
+        'accel_z',
+        'accel_magnitude',
+        'gyro_x',
+        'gyro_y',
+        'gyro_z',
+        'is_pothole',
+        'user_feedback',
+      ];
+      await createCsvWithHeader(csvPath, headers);
     }
 
     return csvPath;
@@ -506,7 +520,7 @@ class FileStorageServiceImpl implements FileStorageService {
     List<CorrectedSensorDataPoint> dataPoints,
   ) async {
     try {
-      // Get the CSV file path, creating it if needed
+      // Get the path to sensors.csv (create if it doesn't exist)
       final csvPath = await getSensorDataCsvPath(
         sessionDirectory,
         createIfNotExists: true,
@@ -515,11 +529,56 @@ class FileStorageServiceImpl implements FileStorageService {
       // Convert data points to CSV rows
       final rows = dataPoints.map((point) => point.toCsvRow()).toList();
 
-      // Append rows to the CSV file
+      // Append to CSV
       return await appendToCsv(csvPath, rows);
     } catch (e) {
       // Log error in a real application
-      print('Error appending to sensor data CSV: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<String> getAnnotationsLogPath(
+    String sessionDirectory, {
+    bool createIfNotExists = false,
+  }) async {
+    // Ensure sessionDirectory exists
+    await createDirectory(sessionDirectory);
+
+    // Define the path to annotations.log in the session directory
+    final logPath = path.join(sessionDirectory, 'annotations.log');
+
+    // Create an empty file if needed and it doesn't already exist
+    if (createIfNotExists && !await fileExists(logPath)) {
+      await writeStringToFile('', logPath);
+    }
+
+    return logPath;
+  }
+
+  @override
+  Future<bool> logAnnotation(
+    String sessionDirectory,
+    int spikeTimestampMs,
+    String feedbackType,
+  ) async {
+    try {
+      // Get the path to annotations.log (create if it doesn't exist)
+      final logPath = await getAnnotationsLogPath(
+        sessionDirectory,
+        createIfNotExists: true,
+      );
+
+      // Format the annotation line
+      final annotationLine = '$spikeTimestampMs,$feedbackType\n';
+
+      // Append the line to the log file
+      final file = File(logPath);
+      await file.writeAsString(annotationLine, mode: FileMode.append);
+
+      return true;
+    } catch (e) {
+      // Log error in a real application
       return false;
     }
   }

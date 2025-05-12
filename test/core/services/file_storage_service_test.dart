@@ -4,6 +4,8 @@ import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'package:multimodal_road_data_collector/core/services/file_storage_service.dart';
 import 'package:multimodal_road_data_collector/core/services/implementations/file_storage_service_impl.dart';
@@ -13,13 +15,49 @@ import 'file_storage_service_test.mocks.dart';
 
 // Generate mocks
 @GenerateMocks([Directory, FileStorageService])
+// Mock for PathProvider
+class MockPathProviderPlatform extends Mock
+    with MockPlatformInterfaceMixin
+    implements PathProviderPlatform {
+  @override
+  Future<String?> getTemporaryPath() async => '/temp';
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => '/docs';
+
+  @override
+  Future<String?> getExternalStoragePath() async => '/external';
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late FileStorageServiceImpl fileStorageService;
+  late Directory tempDir;
+
+  setUpAll(() {
+    // Register mock path provider
+    PathProviderPlatform.instance = MockPathProviderPlatform();
+  });
+
+  setUp(() async {
+    fileStorageService = FileStorageServiceImpl();
+
+    // Create a real temporary directory for testing
+    tempDir = await Directory.systemTemp.createTemp('file_storage_test_');
+  });
+
+  tearDown(() async {
+    // Clean up the temporary directory after each test
+    if (await tempDir.exists()) {
+      await tempDir.delete(recursive: true);
+    }
+  });
+
   group('FileStorageServiceImpl - Session Management', () {
-    late FileStorageServiceImpl fileStorageService;
     late String testBasePath;
 
     setUp(() {
-      fileStorageService = FileStorageServiceImpl();
       testBasePath = '/test/path';
     });
 
@@ -282,13 +320,11 @@ void main() {
   });
 
   group('FileStorageServiceImpl - CSV Operations', () {
-    late FileStorageService fileStorageService;
     late String testBasePath;
     late String testCsvPath;
     late String testSessionDir;
 
     setUp(() {
-      fileStorageService = FileStorageServiceImpl();
       testBasePath = '/test/path';
       testCsvPath = path.join(testBasePath, 'test.csv');
       testSessionDir = path.join(testBasePath, 'session_123');
@@ -376,5 +412,104 @@ void main() {
         );
       },
     );
+  });
+
+  group('Annotation Logging', () {
+    test(
+      'getAnnotationsLogPath creates directory and file when needed',
+      () async {
+        // Arrange
+        final sessionDir = path.join(tempDir.path, 'test_session');
+
+        // Act
+        final logPath = await fileStorageService.getAnnotationsLogPath(
+          sessionDir,
+          createIfNotExists: true,
+        );
+
+        // Assert
+        expect(logPath, path.join(sessionDir, 'annotations.log'));
+        expect(await File(logPath).exists(), true);
+      },
+    );
+
+    test('getAnnotationsLogPath returns path without creating file', () async {
+      // Arrange
+      final sessionDir = path.join(tempDir.path, 'test_session');
+      await Directory(sessionDir).create(recursive: true);
+
+      // Act
+      final logPath = await fileStorageService.getAnnotationsLogPath(
+        sessionDir,
+        createIfNotExists: false,
+      );
+
+      // Assert
+      expect(logPath, path.join(sessionDir, 'annotations.log'));
+      expect(await File(logPath).exists(), false);
+    });
+
+    test('logAnnotation writes entry to annotations.log file', () async {
+      // Arrange
+      final sessionDir = path.join(tempDir.path, 'test_session');
+      await Directory(sessionDir).create(recursive: true);
+      final spikeTimestamp = 12345;
+      final feedbackType = 'Yes';
+
+      // Act
+      final result = await fileStorageService.logAnnotation(
+        sessionDir,
+        spikeTimestamp,
+        feedbackType,
+      );
+
+      // Assert
+      expect(result, true);
+
+      final logPath = path.join(sessionDir, 'annotations.log');
+      final logFile = File(logPath);
+      expect(await logFile.exists(), true);
+
+      final content = await logFile.readAsString();
+      expect(content, '$spikeTimestamp,$feedbackType\n');
+    });
+
+    test('logAnnotation appends to existing file', () async {
+      // Arrange
+      final sessionDir = path.join(tempDir.path, 'test_session');
+      await Directory(sessionDir).create(recursive: true);
+
+      final firstTimestamp = 12345;
+      final firstFeedback = 'Yes';
+      final secondTimestamp = 67890;
+      final secondFeedback = 'No';
+
+      // Act
+      // Log first annotation
+      await fileStorageService.logAnnotation(
+        sessionDir,
+        firstTimestamp,
+        firstFeedback,
+      );
+
+      // Log second annotation
+      final result = await fileStorageService.logAnnotation(
+        sessionDir,
+        secondTimestamp,
+        secondFeedback,
+      );
+
+      // Assert
+      expect(result, true);
+
+      final logPath = path.join(sessionDir, 'annotations.log');
+      final logFile = File(logPath);
+      final content = await logFile.readAsString();
+
+      expect(
+        content,
+        '$firstTimestamp,$firstFeedback\n$secondTimestamp,$secondFeedback\n',
+      );
+    });
   });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:isolate';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import '../../../../core/services/ntp_service.dart';
 import '../../../../core/services/file_storage_service.dart';
 import '../../../../core/services/implementations/file_storage_service_impl.dart';
 import '../models/corrected_sensor_data_point.dart';
+import '../../../../core/utils/ema_filter.dart';
 
 /// Processed sensor data for recording and calibration
 class ProcessedSensorData {
@@ -195,7 +197,8 @@ class RecordingSessionManager {
   final List<CorrectedSensorDataPoint> _sensorDataBuffer = [];
 
   /// Maximum buffer size before flushing to disk (configurable)
-  final int _maxBufferSize = 150;
+  /// Increased from 150 to 300 to allow more time for pothole detection updates
+  final int _maxBufferSize = 300;
 
   /// Current recording session directory
   String? _currentSessionDirectory;
@@ -262,6 +265,11 @@ class RecordingSessionManager {
   _monotonicEndTimeMs; // Device monotonic clock time when sensor stream stops
   DateTime? _ntpEndTime; // NTP-synced time when sensor stream stops
 
+  /// EMA Filters for accelerometer
+  final EMAFilter _emaFilterX = EMAFilter(alpha: 0.15);
+  final EMAFilter _emaFilterY = EMAFilter(alpha: 0.15);
+  final EMAFilter _emaFilterZ = EMAFilter(alpha: 0.15);
+
   /// Constructor
   RecordingSessionManager(
     this._sensorService, [
@@ -315,6 +323,132 @@ class RecordingSessionManager {
   /// Get the current buffered sensor data points
   List<CorrectedSensorDataPoint> getBufferedDataPoints() {
     return List<CorrectedSensorDataPoint>.from(_sensorDataBuffer);
+  }
+
+  /// Update a data point in the buffer (used for pothole detection updates)
+  /// Returns true if the data point was found and updated
+  bool updateDataPoint(CorrectedSensorDataPoint updatedDataPoint) {
+    // We can't directly update the buffer, as the data might have already been flushed
+    // or processed. Instead, we'll update it only if it's still in the buffer.
+
+    // Find matching data point by timestamp
+    final index = _sensorDataBuffer.indexWhere(
+      (dp) => dp.timestampMs == updatedDataPoint.timestampMs,
+    );
+
+    // If found, update it with the new data point
+    if (index >= 0) {
+      _sensorDataBuffer[index] = updatedDataPoint;
+      return true;
+    }
+
+    // Data point not found (already flushed to file)
+    // For pothole annotation window, we won't count this as an error
+    // and we'll return true to avoid warning logs about data points that
+    // are expected to be already flushed
+    return false;
+  }
+
+  /// Update multiple data points in a time window
+  /// Returns the number of data points successfully updated
+  Future<int> updateDataPointsInWindow(
+    int startTimestampMs,
+    int endTimestampMs,
+    bool isPothole,
+    String userFeedback,
+  ) async {
+    // First, update any matching data points in the buffer
+    int updatedCount = 0;
+
+    // Update in buffer
+    for (int i = 0; i < _sensorDataBuffer.length; i++) {
+      final dataPoint = _sensorDataBuffer[i];
+      if (dataPoint.timestampMs >= startTimestampMs &&
+          dataPoint.timestampMs <= endTimestampMs) {
+        _sensorDataBuffer[i] = dataPoint.copyWith(
+          isPothole: isPothole,
+          userFeedback: userFeedback,
+        );
+        updatedCount++;
+      }
+    }
+
+    // If we have a current session directory and a file storage service,
+    // we need to try to update the CSV file for data points that
+    // have already been flushed to disk
+    if (_currentSessionDirectory != null && _fileStorageService != null) {
+      try {
+        final csvPath = await _fileStorageService!.getSensorDataCsvPath(
+          _currentSessionDirectory!,
+          createIfNotExists: false,
+        );
+
+        // Read the existing CSV file if it exists
+        final csvFile = File(csvPath);
+        if (await csvFile.exists()) {
+          final csvContent = await csvFile.readAsString();
+          final lines = csvContent.split('\n');
+
+          // Skip header row
+          bool fileModified = false;
+          for (int i = 1; i < lines.length; i++) {
+            final line = lines[i].trim();
+            if (line.isEmpty) continue;
+
+            final columns = line.split(',');
+            // Make sure we have enough columns to access timestamp, isPothole, and userFeedback
+            if (columns.length >= 9) {
+              try {
+                final timestampMs = int.parse(columns[0]);
+
+                // Check if this row is within our window
+                if (timestampMs >= startTimestampMs &&
+                    timestampMs <= endTimestampMs) {
+                  // Create new columns array with the updated isPothole and userFeedback
+                  final newColumns = List<String>.from(columns);
+                  newColumns[8] = isPothole ? '1' : '0'; // isPothole column
+
+                  // Handle user feedback (properly escape if needed)
+                  String escapedUserFeedback = userFeedback;
+                  if (userFeedback.contains(',') ||
+                      userFeedback.contains('"')) {
+                    // Double quotes are escaped with double quotes in CSV
+                    escapedUserFeedback =
+                        '"${userFeedback.replaceAll('"', '""')}"';
+                  }
+
+                  // Make sure we have enough columns for userFeedback
+                  if (newColumns.length >= 10) {
+                    newColumns[9] = escapedUserFeedback; // userFeedback column
+                  } else if (newColumns.length == 9) {
+                    // Add userFeedback column if it doesn't exist
+                    newColumns.add(escapedUserFeedback);
+                  }
+
+                  // Replace the line in the file
+                  lines[i] = newColumns.join(',');
+                  fileModified = true;
+                  updatedCount++;
+                }
+              } catch (e) {
+                // Skip invalid rows
+                debugPrint('Error parsing CSV row: $e');
+              }
+            }
+          }
+
+          // Write the modified CSV back to the file if changes were made
+          if (fileModified) {
+            await csvFile.writeAsString(lines.join('\n'));
+            debugPrint('Updated CSV file on disk with pothole annotations');
+          }
+        }
+      } catch (e) {
+        debugPrint('Error updating CSV on disk: $e');
+      }
+    }
+
+    return updatedCount;
   }
 
   /// Clear the sensor data buffer
@@ -739,6 +873,12 @@ class RecordingSessionManager {
     _gyroZDrift = 0.0;
     _bumpThreshold = 0.0;
     _useSessionParameters = false;
+
+    // Reset EMA filters here as well if a session is cleared mid-way
+    // or if these params affect EMA (though currently they don't directly)
+    _emaFilterX.reset();
+    _emaFilterY.reset();
+    _emaFilterZ.reset();
   }
 
   /// Process raw sensor data and apply corrections
@@ -751,9 +891,14 @@ class RecordingSessionManager {
     // Calculate relative timestamp from start of recording
     final int relativeTimestampMs = data.timestamp - _monotonicStartTimeMs!;
 
+    // Apply EMA filter to raw accelerometer data
+    double rawAccelX = _emaFilterX.filter(data.accelerometerX);
+    double rawAccelY = _emaFilterY.filter(data.accelerometerY);
+    double rawAccelZ = _emaFilterZ.filter(data.accelerometerZ);
+
     // Apply sensor corrections based on initial calibration
-    double accelX = data.accelerometerX;
-    double accelY = data.accelerometerY;
+    double accelX = rawAccelX; // Use filtered X
+    double accelY = rawAccelY; // Use filtered Y
 
     // Swap X and Y if required by calibration
     if (_swapXY) {
@@ -762,8 +907,8 @@ class RecordingSessionManager {
       accelY = temp;
     }
 
-    // Apply initial Z-offset correction
-    double correctedAccelZ = data.accelerometerZ - _accelZOffset;
+    // Apply initial Z-offset correction to filtered Z
+    double correctedAccelZ = rawAccelZ - _accelZOffset;
 
     // Apply session-specific Z-offset if available
     if (_useSessionParameters) {
@@ -783,14 +928,9 @@ class RecordingSessionManager {
       accelX * accelX + accelY * accelY + correctedAccelZ * correctedAccelZ,
     );
 
-    // Detect bumps if threshold is set
-    // Per user request, we're disabling pothole detection for now
-    // but still keeping the threshold calculation
-    bool isBumpDetected = false;
-    // Temporarily disable pothole detection
-    // if (_useSessionParameters && _bumpThreshold > 0) {
-    //   isBumpDetected = accelMagnitude > _bumpThreshold;
-    // }
+    // We'll no longer detect bumps directly here
+    // SpikeDetectionService will handle proper detection with consecutive readings and refractory periods
+    // This fixes false positives in the CSV data
 
     // Create processed data for the stream
     final processedData = ProcessedSensorData(
@@ -798,7 +938,7 @@ class RecordingSessionManager {
       correctedAccelZ: correctedAccelZ,
       correctedGyroZ: correctedGyroZ,
       accelMagnitude: accelMagnitude,
-      isBumpDetected: isBumpDetected, // Will always be false now
+      isBumpDetected: false, // Always initialize to false
     );
 
     // Create CorrectedSensorDataPoint for buffering/CSV
@@ -811,7 +951,8 @@ class RecordingSessionManager {
       gyroX: data.gyroscopeX,
       gyroY: data.gyroscopeY,
       correctedGyroZ: correctedGyroZ,
-      isPothole: false, // Force to false per user request
+      isPothole:
+          false, // Always initialize to false, will be updated by SpikeDetectionService
     );
 
     // Add to buffer
@@ -824,6 +965,9 @@ class RecordingSessionManager {
 
     // Add processed data to stream for UI updates
     _processedDataController.add(processedData);
+
+    // Process the data point with the SpikeDetectionNotifier if available
+    // This is done outside this class in the recording_screen.dart when reading the sensor stream
   }
 
   /// Handle buffer full event

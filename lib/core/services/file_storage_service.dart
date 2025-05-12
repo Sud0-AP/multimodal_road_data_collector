@@ -94,4 +94,21 @@ abstract class FileStorageService {
     String sessionDirectory,
     List<CorrectedSensorDataPoint> dataPoints,
   );
+
+  /// Get the path to the annotations log file for a specific session
+  /// If createIfNotExists is true, it will create an empty file
+  /// Returns the full path to the annotations.log file
+  Future<String> getAnnotationsLogPath(
+    String sessionDirectory, {
+    bool createIfNotExists = false,
+  });
+
+  /// Logs an annotation event to the annotations.log file for a specific session
+  /// The annotation includes the spike timestamp and user feedback type
+  /// Returns true if the annotation was successfully logged
+  Future<bool> logAnnotation(
+    String sessionDirectory,
+    int spikeTimestampMs,
+    String feedbackType,
+  );
 }

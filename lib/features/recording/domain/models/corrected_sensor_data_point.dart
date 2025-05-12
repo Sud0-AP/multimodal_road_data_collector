@@ -109,6 +109,15 @@ class CorrectedSensorDataPoint {
             ? '"${userFeedback.replaceAll('"', '""')}"' // Double quotes are escaped with double quotes in CSV
             : userFeedback;
 
+    // Handle the isPothole field
+    // - 1 = Yes (confirmed pothole)
+    // - 0 = No (confirmed not a pothole) or no feedback
+    // If userFeedback is "Uncategorized", this is still marked as 0 but the feedback field will indicate it
+    String isPotholeValue = '0';
+    if (isPothole) {
+      isPotholeValue = '1';
+    }
+
     return [
       timestampMs.toString(),
       accelX.toString(),
@@ -118,7 +127,7 @@ class CorrectedSensorDataPoint {
       gyroX.toString(),
       gyroY.toString(),
       gyroZ.toString(),
-      isPothole ? '1' : '0',
+      isPotholeValue,
       escapedUserFeedback,
     ].join(',');
   }

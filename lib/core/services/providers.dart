@@ -8,10 +8,12 @@ import 'implementations/permission_service_impl.dart';
 import 'implementations/preferences_service_impl.dart';
 import 'implementations/sensor_service_impl.dart';
 import 'implementations/ntp_service_impl.dart';
+import 'implementations/spike_detection_service_impl.dart';
 import 'permission_service.dart';
 import 'preferences_service.dart';
 import 'sensor_service.dart';
 import 'ntp_service.dart';
+import 'spike_detection_service.dart';
 
 /// Provider for PermissionService
 final permissionServiceProvider = Provider<PermissionService>((ref) {
@@ -63,6 +65,18 @@ final ntpServiceProvider = Provider<NtpService>((ref) {
 
   // Initialize the service
   service.initialize();
+
+  // Add dispose callback
+  ref.onDispose(() {
+    service.dispose();
+  });
+
+  return service;
+});
+
+/// Provider for SpikeDetectionService
+final spikeDetectionServiceProvider = Provider<SpikeDetectionService>((ref) {
+  final service = SpikeDetectionServiceImpl();
 
   // Add dispose callback
   ref.onDispose(() {

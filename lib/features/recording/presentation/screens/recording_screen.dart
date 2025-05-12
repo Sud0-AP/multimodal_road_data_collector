@@ -11,10 +11,14 @@ import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../features/calibration/presentation/state/calibration_provider.dart';
 import '../../domain/managers/recording_session_manager.dart';
+import '../../domain/models/corrected_sensor_data_point.dart';
 import '../providers/recording_lifecycle_provider.dart';
 import '../state/recording_state.dart';
 import '../state/pre_recording_calibration_state.dart';
+import '../state/spike_detection_notifier.dart';
+import '../state/providers.dart';
 import '../widgets/pre_recording_calibration_overlay.dart';
+import '../widgets/annotation_prompt_overlay.dart';
 
 /// Recording screen with camera preview and recording controls
 class RecordingScreen extends ConsumerStatefulWidget {
@@ -55,6 +59,27 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       _initializeServices();
       _checkCalibrationStatus();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    // Ensure spike detection is initialized if recording is in progress
+    // This handles cases like device rotation or app resume
+    final recordingState = ref.read(recordingStateProvider);
+    if (recordingState.status == RecordingStatus.recording &&
+        recordingState.bumpThreshold != null) {
+      // Re-initialize spike detection if needed
+      final spikeDetectionNotifier = ref.read(spikeDetectionProvider.notifier);
+      if (!ref.read(spikeDetectionProvider).isDetectionActive) {
+        debugPrint('🔄 Re-initializing spike detection after state change');
+        spikeDetectionNotifier.initialize(
+          bumpThreshold: recordingState.bumpThreshold!,
+          refractoryPeriodMs: 8000,
+        );
+      }
+    }
   }
 
   // Initialize all required services
@@ -273,14 +298,126 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
   }
 
   void _handleSensorData(ProcessedSensorData data) {
-    // We can use this to update UI based on sensor data
-    // Pothole detection is currently disabled as per user request
+    // Skip if we're not recording or don't have a session directory
+    if (ref.read(recordingStateProvider).status != RecordingStatus.recording ||
+        ref.read(recordingStateProvider).sessionPath == null) {
+      return;
+    }
 
-    // Debug info about accelerometer data
-    // Use this for debug purposes only
-    // if (data.accelMagnitude > 15.0) {  // Higher threshold just for extreme values
-    //   debugPrint('High acceleration detected: ${data.accelMagnitude}');
-    // }
+    final sessionPath = ref.read(recordingStateProvider).sessionPath!;
+    final bumpThreshold = ref.read(recordingStateProvider).bumpThreshold;
+
+    // Initialize spike detection if not already done
+    final spikeDetectionNotifier = ref.read(spikeDetectionProvider.notifier);
+    if (!ref.read(spikeDetectionProvider).isDetectionActive &&
+        bumpThreshold != null) {
+      spikeDetectionNotifier.initialize(
+        bumpThreshold: bumpThreshold,
+        refractoryPeriodMs:
+            8000, // Updated to 8 seconds refractory period to match implementation
+      );
+    }
+
+    // Process the corrected sensor data point
+    final correctedDataPoint = CorrectedSensorDataPoint.fromProcessedData(
+      relativeTimestampMs:
+          data.rawData.timestamp -
+          _recordingSessionManager.getMonotonicStartTimeMs()!,
+      accelX: data.rawData.accelerometerX,
+      accelY: data.rawData.accelerometerY,
+      correctedAccelZ: data.correctedAccelZ,
+      accelMagnitude: data.accelMagnitude,
+      gyroX: data.rawData.gyroscopeX,
+      gyroY: data.rawData.gyroscopeY,
+      correctedGyroZ: data.correctedGyroZ,
+      isPothole:
+          false, // Initialize to false, will be updated below if detected
+    );
+
+    // Process the data point and check if a spike was detected
+    final spikeDetected = spikeDetectionNotifier.processSensorDataPoint(
+      correctedDataPoint,
+    );
+
+    // Update the isPothole flag in the data point if a spike was detected
+    // This ensures CSV data correctly reflects actual detected potholes (not false positives)
+    final correctedDataPointWithPotholeFlag =
+        spikeDetected
+            ? correctedDataPoint.copyWith(isPothole: true)
+            : correctedDataPoint;
+
+    // Try to update the buffer with the corrected data point (with proper isPothole flag)
+    // This might fail if the data has already been flushed to disk
+    final updated = _recordingSessionManager.updateDataPoint(
+      correctedDataPointWithPotholeFlag,
+    );
+
+    // If it's a pothole detection and we couldn't update it in the buffer (already written)
+    // we should log this special case (as the CSV will have incorrect isPothole flags)
+    if (spikeDetected && !updated) {
+      // Consider logging this special case for debugging
+      debugPrint(
+        '⚠️ Pothole was detected but data point was already written to CSV',
+      );
+    }
+
+    // If a spike is detected, show the annotation prompt
+    if (spikeDetected && mounted) {
+      // Get or create an AnnotationPromptOverlay
+      final annotationOverlay = AnnotationPromptOverlay(context);
+
+      // Show the overlay with callback to log the annotation
+      annotationOverlay.show(
+        onResponse: (String response) {
+          // Get the last spike timestamp
+          final spikeTimestamp =
+              ref.read(spikeDetectionProvider).lastSpikeTimestampMs;
+          if (spikeTimestamp != null) {
+            // Log the annotation
+            _fileStorageService.logAnnotation(
+              sessionPath,
+              spikeTimestamp,
+              response,
+            );
+
+            // Update the isPothole flag and user feedback for ALL data points in the
+            // window (5 seconds before and 5 seconds after the spike)
+            // Calculate window boundaries (5 seconds = ~500 data points at 100Hz)
+            final windowStartMs = spikeTimestamp - 5000; // 5 seconds before
+            final windowEndMs = spikeTimestamp + 5000; // 5 seconds after
+
+            // Set isPothole based on user response
+            // Yes = true, No = false, Uncategorized = -1 (special case)
+            bool isPothole = false;
+            if (response == 'Yes') {
+              isPothole = true;
+            } else if (response == 'Uncategorized') {
+              // For Uncategorized, we'll still mark it in the CSV
+              // but with a special flag indicating timeout/uncategorized
+              isPothole = false; // In CSV we'll use 0 for Uncategorized as well
+            }
+
+            // Update all data points in the time window using the more efficient method
+            _recordingSessionManager
+                .updateDataPointsInWindow(
+                  windowStartMs,
+                  windowEndMs,
+                  isPothole,
+                  response,
+                )
+                .then((updatedCount) {
+                  debugPrint(
+                    'Updated $updatedCount data points for annotation window',
+                  );
+                });
+
+            debugPrint(
+              'Annotation logged: $spikeTimestamp,$response with window [$windowStartMs-$windowEndMs]ms',
+            );
+          }
+        },
+      );
+    }
   }
 
   // Stop recording
@@ -289,6 +426,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       // Cancel recording timer
       _recordingTimer?.cancel();
       _recordingTimer = null;
+
+      // Stop spike detection
+      ref.read(spikeDetectionProvider.notifier).stopDetection();
 
       debugPrint(
         '🎬 VIDEO: Stopping recording at ${DateTime.now().toIso8601String()}',

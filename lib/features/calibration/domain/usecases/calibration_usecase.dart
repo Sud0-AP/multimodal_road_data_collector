@@ -7,7 +7,13 @@ import '../repositories/calibration_repository.dart';
 import '../../domain/models/initial_calibration_data.dart';
 
 /// Number of standard deviations to use for bump threshold calculation
-const double kBumpThresholdMultiplier = 2.5;
+const double kBumpThresholdMultiplier = 5.0;
+
+/// Minimum threshold value for bump detection regardless of calculation
+const double kMinimumBumpThreshold = 1.5;
+
+/// Minimum standard deviation to use in bump threshold calculation
+const double kMinStdDeviation = 0.15;
 
 /// Data class to hold bump threshold calculation results
 class _BumpThresholdResult {
@@ -249,8 +255,19 @@ class CalibrationUseCase {
     final variance = sumSquaredDifferences / accelMagnitudeValues.length;
     final stdDeviation = sqrt(variance);
 
+    // Use a minimum standard deviation to prevent extremely low thresholds
+    final effectiveStdDev =
+        stdDeviation < kMinStdDeviation ? kMinStdDeviation : stdDeviation;
+
     // Calculate threshold as mean + N * standard deviation
-    final threshold = mean + (kBumpThresholdMultiplier * stdDeviation);
+    final calculatedThreshold =
+        mean + (kBumpThresholdMultiplier * effectiveStdDev);
+
+    // Ensure the threshold is at least the minimum value
+    final threshold =
+        calculatedThreshold < kMinimumBumpThreshold
+            ? kMinimumBumpThreshold
+            : calculatedThreshold;
 
     return _BumpThresholdResult(threshold, stdDeviation);
   }

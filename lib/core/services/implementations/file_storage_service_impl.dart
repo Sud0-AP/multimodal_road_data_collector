@@ -582,4 +582,301 @@ class FileStorageServiceImpl implements FileStorageService {
       return false;
     }
   }
+
+  @override
+  Future<bool> writeMetadata(String metadataContent, String sessionPath) async {
+    try {
+      final metadataFilePath = path.join(sessionPath, 'metadata.txt');
+      print('📄 METADATA: Writing metadata to $metadataFilePath');
+
+      // Ensure the session directory exists
+      final dir = Directory(sessionPath);
+      if (!await dir.exists()) {
+        print('📁 METADATA: Creating directory $sessionPath');
+        await dir.create(recursive: true);
+      }
+
+      // Write the file
+      final result = await writeStringToFile(metadataContent, metadataFilePath);
+
+      // Verify file was written
+      final metadataFile = File(metadataFilePath);
+      final exists = await metadataFile.exists();
+
+      if (exists) {
+        final size = await metadataFile.length();
+        print(
+          '✅ METADATA: Successfully wrote ${size} bytes to $metadataFilePath',
+        );
+      } else {
+        print(
+          '❌ METADATA: Failed to write metadata file - file does not exist after write',
+        );
+      }
+
+      return result && exists;
+    } catch (e) {
+      print('❌ METADATA ERROR: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<Map<String, String>?> readMetadataSummary(
+    String sessionPath, [
+    List<String>? keysToRead,
+  ]) async {
+    try {
+      final metadataFilePath = path.join(sessionPath, 'metadata.txt');
+      final content = await readStringFromFile(metadataFilePath);
+
+      if (content == null) {
+        return null;
+      }
+
+      // Parse content line by line
+      final Map<String, String> result = {};
+      final lines = content.split('\n');
+
+      for (final line in lines) {
+        // Skip section headers and empty lines
+        if (line.isEmpty || line.startsWith('---')) {
+          continue;
+        }
+
+        // Extract key-value pairs
+        final separatorIndex = line.indexOf(':');
+        if (separatorIndex > 0) {
+          final key = line.substring(0, separatorIndex).trim();
+          final value = line.substring(separatorIndex + 1).trim();
+
+          // If keysToRead is specified, only include those keys
+          if (keysToRead == null || keysToRead.contains(key)) {
+            result[key] = value;
+          }
+
+          // If we've found all the keys we need, break early
+          if (keysToRead != null && result.length == keysToRead.length) {
+            break;
+          }
+        }
+      }
+
+      return result;
+    } catch (e) {
+      // Log error in a real application
+      return null;
+    }
+  }
+
+  @override
+  Future<List<String>> listRecordingSessionPaths() async {
+    try {
+      final documentsDir = await getDocumentsDirectoryPath();
+      final recordingsDir = path.join(documentsDir, 'recordings');
+
+      print('📂 RECORDINGS: Looking for recordings in $recordingsDir');
+
+      // Create the recordings directory if it doesn't exist
+      if (!await Directory(recordingsDir).exists()) {
+        print('📁 RECORDINGS: Creating directory $recordingsDir');
+        await Directory(recordingsDir).create(recursive: true);
+        return [];
+      }
+
+      // List all subdirectories in the recordings directory
+      final dir = Directory(recordingsDir);
+      final List<String> sessionPaths = [];
+
+      final entities = await dir.list().toList();
+      print(
+        '📂 RECORDINGS: Found ${entities.length} items in recordings directory',
+      );
+
+      // First check for Android Download folder sessions
+      final downloadPath = '/storage/emulated/0/Download/RoadDataCollector';
+      if (Platform.isAndroid && await Directory(downloadPath).exists()) {
+        print(
+          '📂 RECORDINGS: Checking Android Download folder at $downloadPath',
+        );
+        final downloadEntities = await Directory(downloadPath).list().toList();
+        print(
+          '📂 RECORDINGS: Found ${downloadEntities.length} items in Download/RoadDataCollector',
+        );
+
+        for (final entity in downloadEntities) {
+          if (entity is Directory) {
+            print(
+              '📂 RECORDINGS: Found directory in Downloads: ${entity.path}',
+            );
+
+            // Check files in this directory
+            final dirFiles = await Directory(entity.path).list().toList();
+            print(
+              '📂 RECORDINGS: Directory contains ${dirFiles.length} files/folders',
+            );
+
+            // Add this path to our sessions list
+            sessionPaths.add(entity.path);
+          }
+        }
+      }
+
+      for (final entity in entities) {
+        if (entity is Directory) {
+          print(
+            '📂 RECORDINGS: Found potential session directory: ${entity.path}',
+          );
+
+          // Try to list files in this directory to see what's available
+          try {
+            final dirFiles = await Directory(entity.path).list().toList();
+            print(
+              '📂 RECORDINGS: Directory contains ${dirFiles.length} files/folders',
+            );
+
+            // Add this to session paths regardless, we'll filter in the UI if needed
+            sessionPaths.add(entity.path);
+
+            // Continue with detailed file checking for debugging
+            final metadataFile = File(path.join(entity.path, 'metadata.txt'));
+            final metadataExists = await metadataFile.exists();
+
+            final videoFile = File(path.join(entity.path, 'video.mp4'));
+            final videoExists = await videoFile.exists();
+
+            final sensorsFile = File(path.join(entity.path, 'sensors.csv'));
+            final sensorsExists = await sensorsFile.exists();
+
+            print(
+              '📂 RECORDINGS: Files in ${path.basename(entity.path)}: ' +
+                  'metadata.txt: $metadataExists, ' +
+                  'video.mp4: $videoExists, ' +
+                  'sensors.csv: $sensorsExists',
+            );
+          } catch (e) {
+            print(
+              '❌ RECORDINGS: Error checking files in directory ${entity.path}: $e',
+            );
+          }
+        }
+      }
+
+      // Sort by directory name (which should be a timestamp) in descending order
+      sessionPaths.sort((a, b) {
+        final aName = path.basename(a);
+        final bName = path.basename(b);
+        return bName.compareTo(aName); // Descending order (newest first)
+      });
+
+      print('📂 RECORDINGS: Returning ${sessionPaths.length} session paths');
+      return sessionPaths;
+    } catch (e) {
+      // Log error in a real application
+      print('❌ RECORDINGS ERROR: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<List<String>> getSessionFilePathsForSharing(String sessionPath) async {
+    try {
+      final List<String> filePaths = [];
+
+      // Add standard files if they exist
+      final videoFile = File(path.join(sessionPath, 'video.mp4'));
+      if (await videoFile.exists()) {
+        filePaths.add(videoFile.path);
+      }
+
+      final sensorsFile = File(path.join(sessionPath, 'sensors.csv'));
+      if (await sensorsFile.exists()) {
+        filePaths.add(sensorsFile.path);
+      }
+
+      final metadataFile = File(path.join(sessionPath, 'metadata.txt'));
+      if (await metadataFile.exists()) {
+        filePaths.add(metadataFile.path);
+      }
+
+      final annotationsFile = File(path.join(sessionPath, 'annotations.log'));
+      if (await annotationsFile.exists()) {
+        filePaths.add(annotationsFile.path);
+      }
+
+      return filePaths;
+    } catch (e) {
+      // Log error in a real application
+      return [];
+    }
+  }
+
+  @override
+  Future<bool> deleteDirectoryRecursive(String directoryPath) async {
+    try {
+      final directory = Directory(directoryPath);
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+        return true;
+      }
+      return true; // Directory already doesn't exist
+    } catch (e) {
+      // Log error in a real application
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> openDirectoryInFileExplorer(String directoryPath) async {
+    try {
+      if (Platform.isAndroid) {
+        // On Android, construct a content:// URI or storage URI
+        // This is a placeholder - actual implementation may require platform channel
+        return false; // Default implementation returns false for now
+      } else if (Platform.isIOS) {
+        // iOS doesn't have a standard file explorer, so this is not applicable
+        return false;
+      }
+      return false;
+    } catch (e) {
+      // Log error in a real application
+      return false;
+    }
+  }
+
+  @override
+  Future<String> createNewSessionDirectory() async {
+    try {
+      // Get the documents directory
+      final documentsDir = await getDocumentsDirectoryPath();
+
+      // Create a recordings subdirectory if it doesn't exist
+      final recordingsDir = path.join(documentsDir, 'recordings');
+      final recordingsDirObj = Directory(recordingsDir);
+      if (!await recordingsDirObj.exists()) {
+        await recordingsDirObj.create(recursive: true);
+      }
+
+      // Generate a timestamp for the session folder name (YYYYMMDD_HHMMSS)
+      final now = DateTime.now();
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
+      final sessionDir = path.join(recordingsDir, timestamp);
+
+      // Create the session directory
+      await Directory(sessionDir).create(recursive: true);
+
+      return sessionDir;
+    } catch (e) {
+      // Log error in a real application
+      // For now, return a fallback directory name
+      final documentsDir = await getDocumentsDirectoryPath();
+      final fallbackDir = path.join(
+        documentsDir,
+        'recordings',
+        'fallback_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await Directory(fallbackDir).create(recursive: true);
+      return fallbackDir;
+    }
+  }
 }

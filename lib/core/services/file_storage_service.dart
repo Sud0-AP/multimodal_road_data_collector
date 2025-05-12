@@ -58,6 +58,41 @@ abstract class FileStorageService {
 
   /// Create a new uniquely named session directory with timestamp (YYYYMMDD_HHMMSS format)
   /// Returns the path to the created session directory
+  Future<String> createNewSessionDirectory();
+
+  /// Write metadata to a file in the specified session directory
+  /// [metadataContent] is the formatted metadata string
+  /// [sessionPath] is the path to the session directory
+  /// Returns true if writing was successful
+  Future<bool> writeMetadata(String metadataContent, String sessionPath);
+
+  /// Read the metadata file from a session and return a map with specific key values
+  /// [sessionPath] is the path to the session directory
+  /// [keysToRead] is an optional list of specific keys to extract (for efficiency)
+  /// Returns a map of key-value pairs from the metadata file
+  Future<Map<String, String>?> readMetadataSummary(
+    String sessionPath, [
+    List<String>? keysToRead,
+  ]);
+
+  /// Get all recording session directories ordered by most recent first
+  /// Returns a list of full paths to session directories
+  Future<List<String>> listRecordingSessionPaths();
+
+  /// Get all files required for sharing a recording session
+  /// Returns a list of file paths: video, sensors.csv, metadata.txt, annotations.log
+  Future<List<String>> getSessionFilePathsForSharing(String sessionPath);
+
+  /// Delete a directory and all its contents
+  /// Returns true if deletion was successful
+  Future<bool> deleteDirectoryRecursive(String directoryPath);
+
+  /// Attempt to open a directory in the device's file explorer
+  /// Returns true if the directory was successfully opened
+  Future<bool> openDirectoryInFileExplorer(String directoryPath);
+
+  /// Create a new uniquely named session directory with timestamp (YYYYMMDD_HHMMSS format)
+  /// Returns the path to the created session directory
   Future<String> createSessionDirectory();
 
   /// Get the base directory where all sessions are stored

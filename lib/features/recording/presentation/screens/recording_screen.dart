@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as path;
 
 import '../../../../app/router.dart';
 import '../../../../core/services/camera_service.dart';
@@ -19,6 +20,7 @@ import '../state/spike_detection_notifier.dart';
 import '../state/providers.dart';
 import '../widgets/pre_recording_calibration_overlay.dart';
 import '../widgets/annotation_prompt_overlay.dart';
+import '../../../recordings/presentation/providers/recordings_providers.dart';
 
 /// Recording screen with camera preview and recording controls
 class RecordingScreen extends ConsumerStatefulWidget {
@@ -538,6 +540,50 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         debugPrint(
           '📊 VERIFICATION: CSV contains approximately ${csvSize ~/ 100} data points',
         );
+      }
+
+      // Generate metadata.txt file
+      final recState = ref.read(recordingStateProvider);
+
+      // Create recording completion data with all necessary information
+      final Map<String, dynamic> recordingData = {
+        'sessionId': path.basename(updatedSessionDir),
+        'durationSeconds': recState.recordingDurationSeconds,
+        'orientationMode': 'portrait', // Default orientation
+        'accelOffsetX': 0.0,
+        'accelOffsetY': 0.0,
+        'accelOffsetZ': 0.0,
+        'gyroOffsetX': 0.0,
+        'gyroOffsetY': 0.0,
+        'gyroOffsetZ': 0.0,
+        'sessionAdjustedAccelZ': recState.sessionAccelOffsetZ ?? 0.0,
+        'bumpThreshold': recState.bumpThreshold ?? 0.0,
+        'gyroZDrift': recState.gyroZDrift ?? 0.0,
+        'videoStartNtp': DateTime.now().subtract(
+          Duration(seconds: recState.recordingDurationSeconds),
+        ),
+        'videoEndNtp': DateTime.now(),
+        'sensorStartNtp': DateTime.now().subtract(
+          Duration(seconds: recState.recordingDurationSeconds),
+        ),
+        'sensorEndNtp': DateTime.now(),
+        'sensorStartMonotonicMs': 0,
+        'sensorEndMonotonicMs': recState.recordingDurationSeconds * 1000,
+        'actualSamplingRateHz': 50.0, // Default sampling rate
+        'videoResolution': '1920x1080', // Default resolution
+        'warnings': <String>[], // Empty list of strings for warnings
+      };
+
+      // Add the import for the recordings notifier provider
+      // Call generateAndSaveMetadata on the DataManagementService directly
+      final dataManagementService = ref.read(dataManagementServiceProvider);
+      final metadataSuccess = await dataManagementService
+          .generateAndSaveMetadata(updatedSessionDir, recordingData);
+
+      if (metadataSuccess) {
+        debugPrint('✅ METADATA: Generated and saved successfully');
+      } else {
+        debugPrint('❌ METADATA: Failed to generate or save metadata');
       }
     } catch (e) {
       debugPrint('❌ ERROR stopping recording: $e');

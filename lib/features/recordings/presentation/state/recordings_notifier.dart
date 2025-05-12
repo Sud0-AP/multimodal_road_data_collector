@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multimodal_road_data_collector/core/services/data_management_service.dart';
 import 'package:multimodal_road_data_collector/features/recordings/domain/models/recording_display_info.dart';
@@ -7,6 +8,10 @@ import 'package:path/path.dart' as path;
 /// Notifier for managing recordings data and UI state
 class RecordingsNotifier extends StateNotifier<RecordingsState> {
   final DataManagementService _dataManagementService;
+
+  // Track load attempt count to handle retries
+  int _loadAttemptCount = 0;
+  static const int _maxRetryAttempts = 2;
 
   /// Constructor
   RecordingsNotifier({required DataManagementService dataManagementService})
@@ -29,6 +34,8 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
       if (sessionPaths.isEmpty) {
         print('No recording sessions found - setting empty state');
         state = state.copyWith(status: RecordingsStatus.loaded, recordings: []);
+        // Reset retry counter on success
+        _loadAttemptCount = 0;
         return;
       }
 
@@ -87,9 +94,40 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
         status: RecordingsStatus.loaded,
         recordings: recordings,
       );
+
+      // Reset retry counter on success
+      _loadAttemptCount = 0;
     } catch (e) {
-      // Update state with error
       print('Error loading recordings: $e');
+
+      // Check if this is a specific "package not found" or similar initialization error
+      final errorMsg = e.toString().toLowerCase();
+      final isInitError =
+          errorMsg.contains('package') &&
+          (errorMsg.contains('not found') ||
+              errorMsg.contains('missing') ||
+              errorMsg.contains('null'));
+
+      // If it's a potential init error and we haven't retried too many times
+      if (isInitError && _loadAttemptCount < _maxRetryAttempts) {
+        _loadAttemptCount++;
+        print(
+          'Detected initialization error, retrying (attempt $_loadAttemptCount)...',
+        );
+
+        // Set temporary error state
+        state = state.copyWith(
+          status: RecordingsStatus.error,
+          errorMessage: 'Initializing services, please wait...',
+        );
+
+        // Wait a moment before retrying
+        await Future.delayed(const Duration(milliseconds: 1500));
+        await loadRecordings(); // Recursive retry
+        return;
+      }
+
+      // If we've exhausted retries or it's not an init error, report the error
       state = state.copyWith(
         status: RecordingsStatus.error,
         errorMessage: 'Error loading recordings: $e',

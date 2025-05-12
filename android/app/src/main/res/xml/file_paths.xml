@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Share files from internal app cache directory -->
+    <cache-path name="cache" path="." />
+    
+    <!-- Share files from internal app files directory -->
+    <files-path name="files" path="." />
+    
+    <!-- Share files from external storage/downloads -->
+    <external-path name="external" path="." />
+    
+    <!-- Share files from external public download directory -->
+    <external-path name="downloads" path="Download" />
+    
+    <!-- Share files specifically from our app's data in Downloads -->
+    <external-path name="road_data" path="Download/RoadDataCollector" />
+</paths>

@@ -3,12 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/app_constants.dart';
 import '../core/providers/service_providers.dart';
 import '../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../features/calibration/presentation/screens/initial_calibration_screen.dart';
 import '../features/calibration/presentation/state/calibration_provider.dart';
 import '../features/recording/presentation/screens/recording_screen.dart';
 import '../features/recordings/presentation/screens/recordings_list_screen.dart';
+import '../features/settings/presentation/screens/settings_screen.dart';
 
 /// Routes names used throughout the app
 class AppRoutes {
@@ -17,6 +19,7 @@ class AppRoutes {
   static const String calibration = 'calibration';
   static const String recording = 'recording';
   static const String recordings = 'recordings';
+  static const String settings = 'settings';
 
   // Path names
   static const String onboardingPath = '/onboarding';
@@ -24,6 +27,7 @@ class AppRoutes {
   static const String calibrationPath = '/calibration';
   static const String recordingPath = '/recording';
   static const String recordingsPath = '/recordings';
+  static const String settingsPath = '/settings';
 }
 
 /// Provider for the initial onboarding status
@@ -31,7 +35,7 @@ final initialOnboardingCompletedProvider = FutureProvider<bool>((ref) async {
   // Get shared preferences directly
   final prefs = await SharedPreferences.getInstance();
   // Check if onboarding is completed
-  return prefs.getBool(kIsOnboardingComplete) ?? false;
+  return prefs.getBool(AppConstants.keyIsOnboardingComplete) ?? false;
 });
 
 /// Provider for the app router
@@ -58,7 +62,16 @@ final routerProvider = Provider<GoRouter>((ref) {
 
           // Placeholder home screen with a button to navigate to calibration screen
           return Scaffold(
-            appBar: AppBar(title: const Text('Road Data Collector')),
+            appBar: AppBar(
+              title: const Text('Road Data Collector'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => context.pushNamed(AppRoutes.settings),
+                  tooltip: 'Settings',
+                ),
+              ],
+            ),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -121,6 +134,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.recordingsPath,
         name: AppRoutes.recordings,
         builder: (context, state) => const RecordingsListScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.settingsPath,
+        name: AppRoutes.settings,
+        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );

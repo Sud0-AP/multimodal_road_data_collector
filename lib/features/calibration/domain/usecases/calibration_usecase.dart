@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:math';
 
+import '../../../../constants/app_constants.dart';
 import '../../../../core/services/sensor_service.dart';
+import '../../../../core/services/preferences_service.dart';
 import '../models/pre_recording_calibration_result.dart';
 import '../repositories/calibration_repository.dart';
 import '../../domain/models/initial_calibration_data.dart';
 
 /// Number of standard deviations to use for bump threshold calculation
+/// @deprecated Use the value from preferences via PreferencesService
 const double kBumpThresholdMultiplier = 5.0;
 
 /// Minimum threshold value for bump detection regardless of calculation
@@ -31,6 +34,9 @@ class CalibrationUseCase {
   /// The calibration repository for accessing stored calibration data
   final CalibrationRepository _calibrationRepository;
 
+  /// The preferences service to retrieve user settings
+  final PreferencesService _preferencesService;
+
   /// Duration for pre-recording calibration in seconds
   static const int preRecordingCalibrationDurationSec = 20;
 
@@ -47,8 +53,10 @@ class CalibrationUseCase {
   CalibrationUseCase({
     required SensorService sensorService,
     required CalibrationRepository calibrationRepository,
+    required PreferencesService preferencesService,
   }) : _sensorService = sensorService,
-       _calibrationRepository = calibrationRepository;
+       _calibrationRepository = calibrationRepository,
+       _preferencesService = preferencesService;
 
   /// Performs pre-recording calibration
   ///
@@ -128,14 +136,22 @@ class CalibrationUseCase {
           subscription.cancel();
 
           // Process collected data
-          final result = _processCalibrationData(
-            accelZValues,
-            gyroZValues,
-            accelMagnitudeValues,
-            initialCalibrationData,
-          );
-
-          completer.complete(result);
+          _processCalibrationData(
+                accelZValues,
+                gyroZValues,
+                accelMagnitudeValues,
+                initialCalibrationData,
+              )
+              .then((result) {
+                completer.complete(result);
+              })
+              .catchError((e) {
+                completer.complete(
+                  PreRecordingCalibrationResult.initial().copyWith(
+                    isCalibrationSuccessful: false,
+                  ),
+                );
+              });
         }
       },
       onError: (error) {
@@ -170,12 +186,12 @@ class CalibrationUseCase {
   }
 
   /// Process collected calibration data to produce calibration results
-  PreRecordingCalibrationResult _processCalibrationData(
+  Future<PreRecordingCalibrationResult> _processCalibrationData(
     List<double> accelZValues,
     List<double> gyroZValues,
     List<double> accelMagnitudeValues,
     InitialCalibrationData initialCalibrationData,
-  ) {
+  ) async {
     if (accelZValues.isEmpty ||
         gyroZValues.isEmpty ||
         accelMagnitudeValues.isEmpty) {
@@ -193,7 +209,9 @@ class CalibrationUseCase {
     final gyroZDrift = _calculateGyroDrift(gyroZValues);
 
     // 3. Bump Threshold Baseline
-    final bumpThresholdResult = _calculateBumpThreshold(accelMagnitudeValues);
+    final bumpThresholdResult = await _calculateBumpThreshold(
+      accelMagnitudeValues,
+    );
 
     return PreRecordingCalibrationResult(
       sessionAccelOffsetZ: sessionAccelOffsetZ,
@@ -237,9 +255,9 @@ class CalibrationUseCase {
   }
 
   /// Calculate dynamic bump threshold based on acceleration magnitude
-  _BumpThresholdResult _calculateBumpThreshold(
+  Future<_BumpThresholdResult> _calculateBumpThreshold(
     List<double> accelMagnitudeValues,
-  ) {
+  ) async {
     // Calculate mean
     final mean =
         accelMagnitudeValues.reduce((a, b) => a + b) /
@@ -259,9 +277,15 @@ class CalibrationUseCase {
     final effectiveStdDev =
         stdDeviation < kMinStdDeviation ? kMinStdDeviation : stdDeviation;
 
+    // Get the multiplier from preferences, or use default if not set
+    final multiplier =
+        await _preferencesService.getDouble(
+          AppConstants.keyBumpThresholdMultiplier,
+        ) ??
+        AppConstants.defaultBumpThresholdMultiplier;
+
     // Calculate threshold as mean + N * standard deviation
-    final calculatedThreshold =
-        mean + (kBumpThresholdMultiplier * effectiveStdDev);
+    final calculatedThreshold = mean + (multiplier * effectiveStdDev);
 
     // Ensure the threshold is at least the minimum value
     final threshold =

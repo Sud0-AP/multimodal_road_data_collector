@@ -14,6 +14,7 @@ final calibrationUseCaseProvider = Provider((ref) {
         (repository) => CalibrationUseCase(
           sensorService: ref.watch(sensorServiceProvider),
           calibrationRepository: repository,
+          preferencesService: ref.watch(preferencesServiceProvider).value!,
         ),
     loading:
         () =>

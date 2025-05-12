@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
 
 import '../../domain/models/recording_display_info.dart';
 
@@ -14,6 +15,9 @@ class RecordingListItem extends StatelessWidget {
   /// Callback for when the user wants to share the recording
   final VoidCallback? onShare;
 
+  /// Callback for when the user wants to view the recording in the file explorer
+  final VoidCallback? onViewInFolder;
+
   /// Callback for when the user taps on the item (view details)
   final VoidCallback? onTap;
 
@@ -23,6 +27,7 @@ class RecordingListItem extends StatelessWidget {
     required this.recording,
     this.onDelete,
     this.onShare,
+    this.onViewInFolder,
     this.onTap,
   });
 
@@ -80,6 +85,13 @@ class RecordingListItem extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  // View in folder button - only show on Android
+                  if (onViewInFolder != null && Platform.isAndroid)
+                    IconButton(
+                      icon: const Icon(Icons.folder_open),
+                      tooltip: 'View in Folder',
+                      onPressed: onViewInFolder,
+                    ),
                   // Share button
                   if (onShare != null)
                     IconButton(

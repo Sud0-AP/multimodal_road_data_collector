@@ -368,11 +368,13 @@ class DataManagementServiceImpl implements DataManagementService {
       final files = filePaths.map((path) => XFile(path)).toList();
 
       // Share files
+      // Note: For text parameter, we need to check if this is Android or iOS
+      // On Android, text must be a String not CharSequence
+      // Use null for the text parameter to avoid issues with type casting
       await Share.shareXFiles(
         files,
         subject: 'Road Data Recording ${path.basename(sessionPath)}',
-        text:
-            'Road Data Collected on ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
+        text: null, // Set to null to avoid type casting issues
       );
 
       return true;
@@ -386,27 +388,90 @@ class DataManagementServiceImpl implements DataManagementService {
   @override
   Future<bool> openSessionInFileExplorer(String sessionPath) async {
     try {
-      // First try to use the FileStorageService's method
-      final opened = await _fileStorageService.openDirectoryInFileExplorer(
-        sessionPath,
-      );
-
-      if (opened) {
-        return true;
+      // Don't even try on iOS
+      if (Platform.isIOS) {
+        print('Opening file explorer is not supported on iOS');
+        return false;
       }
 
-      // If that failed, try URL launcher as fallback
       if (Platform.isAndroid) {
-        // On Android, construct a file:// URI
-        final uri = Uri.file(sessionPath);
-        if (await canLaunchUrl(uri)) {
-          return await launchUrl(uri);
+        // For Android, we should use the proper FileProvider approach
+        final Directory sessionDir = Directory(sessionPath);
+        if (!await sessionDir.exists()) {
+          print('Directory does not exist: $sessionPath');
+          return false;
+        }
+
+        print('Trying to open directory: $sessionPath');
+
+        // Extract the folder name from the path
+        final folderName = path.basename(sessionPath);
+
+        // Use the content URI approach which works in the previous version
+        final String basePath = 'RoadDataCollector';
+        final uriString =
+            'content://com.android.externalstorage.documents/document/primary%3ADownload%2F${basePath}%2F${Uri.encodeComponent(folderName)}';
+        final Uri uri = Uri.parse(uriString);
+
+        print("Attempting to launch URI: $uriString");
+        try {
+          final bool launched = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+          if (!launched) {
+            print("launchUrl returned false for $uriString");
+
+            // Try fallback to base folder
+            print("Trying fallback to base folder...");
+            const baseUriString =
+                'content://com.android.externalstorage.documents/document/primary%3ADownload%2FRoadDataCollector';
+            final baseUri = Uri.parse(baseUriString);
+            print("Fallback: Attempting to launch base URI: $baseUriString");
+            try {
+              final bool baseLaunched = await launchUrl(
+                baseUri,
+                mode: LaunchMode.externalApplication,
+              );
+              if (!baseLaunched) {
+                print("Base fallback also failed");
+                return false;
+              }
+              return true;
+            } catch (baseE) {
+              print("Error launching base URL $baseUriString: $baseE");
+              return false;
+            }
+          }
+          return true;
+        } catch (e) {
+          print("Error launching URL $uriString: $e");
+
+          // Try fallback methods from the original implementation
+          // Create a dummy index.html file
+          final File indexFile = File('${sessionPath}/index.html');
+          if (!await indexFile.exists()) {
+            await indexFile.writeAsString(
+              '<html><body><h1>Road Data Recording</h1><p>This file was created to help navigate to this folder.</p></body></html>',
+            );
+          }
+
+          // Try to use the default file manager with a proper MIME type
+          final uri = Uri.file(indexFile.path);
+          if (await canLaunchUrl(uri)) {
+            print('Opening folder via index.html file: $uri');
+            return await launchUrl(
+              uri,
+              mode: LaunchMode.externalNonBrowserApplication,
+            );
+          }
+          return false;
         }
       }
 
       return false;
     } catch (e) {
-      // Log error
+      // Log the error
       print('Error opening file explorer: $e');
       return false;
     }

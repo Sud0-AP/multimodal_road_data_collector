@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import '../file_storage_service.dart';
 import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Implementation of FileStorageService using dart:io and path_provider
 class FileStorageServiceImpl implements FileStorageService {
@@ -781,32 +782,91 @@ class FileStorageServiceImpl implements FileStorageService {
   @override
   Future<List<String>> getSessionFilePathsForSharing(String sessionPath) async {
     try {
+      print('👨‍💻 SHARING: Getting files from $sessionPath');
       final List<String> filePaths = [];
 
       // Add standard files if they exist
       final videoFile = File(path.join(sessionPath, 'video.mp4'));
       if (await videoFile.exists()) {
         filePaths.add(videoFile.path);
+        print('👨‍💻 SHARING: Added video file: ${videoFile.path}');
       }
 
       final sensorsFile = File(path.join(sessionPath, 'sensors.csv'));
       if (await sensorsFile.exists()) {
         filePaths.add(sensorsFile.path);
+        print('👨‍💻 SHARING: Added sensors file: ${sensorsFile.path}');
       }
 
       final metadataFile = File(path.join(sessionPath, 'metadata.txt'));
       if (await metadataFile.exists()) {
         filePaths.add(metadataFile.path);
+        print('👨‍💻 SHARING: Added metadata file: ${metadataFile.path}');
       }
 
-      final annotationsFile = File(path.join(sessionPath, 'annotations.log'));
-      if (await annotationsFile.exists()) {
-        filePaths.add(annotationsFile.path);
+      // Check for different possible log files - be very explicit with naming
+      final annotationsLogFile = File(
+        path.join(sessionPath, 'annotations.log'),
+      );
+      if (await annotationsLogFile.exists()) {
+        filePaths.add(annotationsLogFile.path);
+        print(
+          '👨‍💻 SHARING: Added annotations.log file: ${annotationsLogFile.path}',
+        );
+      }
+
+      // Specifically look for annotation.log (singular form without 's')
+      final annotationLogFile = File(path.join(sessionPath, 'annotation.log'));
+      if (await annotationLogFile.exists()) {
+        filePaths.add(annotationLogFile.path);
+        print(
+          '👨‍💻 SHARING: Added annotation.log file: ${annotationLogFile.path}',
+        );
+      }
+
+      // Also check for session.log if it exists
+      final sessionLogFile = File(path.join(sessionPath, 'session.log'));
+      if (await sessionLogFile.exists()) {
+        filePaths.add(sessionLogFile.path);
+        print('👨‍💻 SHARING: Added session.log file: ${sessionLogFile.path}');
+      }
+
+      // Recursive function to find all log files in a directory
+      Future<void> findLogFilesRecursively(String dirPath) async {
+        try {
+          final dir = Directory(dirPath);
+          if (!await dir.exists()) return;
+
+          await for (final entity in dir.list()) {
+            if (entity is File && entity.path.toLowerCase().endsWith('.log')) {
+              if (!filePaths.contains(entity.path)) {
+                filePaths.add(entity.path);
+                print(
+                  '👨‍💻 SHARING: Added log file from recursive scan: ${entity.path}',
+                );
+              }
+            } else if (entity is Directory) {
+              // Check subdirectories too (within reason - don't go too deep)
+              await findLogFilesRecursively(entity.path);
+            }
+          }
+        } catch (e) {
+          print('❌ SHARING: Error searching for log files: $e');
+        }
+      }
+
+      // Do a thorough search for log files
+      await findLogFilesRecursively(sessionPath);
+
+      print('👨‍💻 SHARING: Total files to share: ${filePaths.length}');
+      for (int i = 0; i < filePaths.length; i++) {
+        print('👨‍💻 SHARING: File ${i + 1}: ${filePaths[i]}');
       }
 
       return filePaths;
     } catch (e) {
       // Log error in a real application
+      print('❌ SHARING ERROR: $e');
       return [];
     }
   }
@@ -830,16 +890,89 @@ class FileStorageServiceImpl implements FileStorageService {
   Future<bool> openDirectoryInFileExplorer(String directoryPath) async {
     try {
       if (Platform.isAndroid) {
-        // On Android, construct a content:// URI or storage URI
-        // This is a placeholder - actual implementation may require platform channel
-        return false; // Default implementation returns false for now
+        final directory = Directory(directoryPath);
+        if (!await directory.exists()) {
+          print('Directory does not exist: $directoryPath');
+          return false;
+        }
+
+        // Extract the folder name from the path
+        final folderName = path.basename(directoryPath);
+
+        // Format path for Android using content URI
+        final String basePath = 'RoadDataCollector';
+        final uriString =
+            'content://com.android.externalstorage.documents/document/primary%3ADownload%2F${basePath}%2F${Uri.encodeComponent(folderName)}';
+        final Uri uri = Uri.parse(uriString);
+
+        print("Attempting to launch URI: $uriString");
+        try {
+          final bool launched = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+          if (!launched) {
+            print("launchUrl returned false for $uriString");
+
+            // Try fallback to base folder
+            print("Trying fallback to base folder...");
+            const baseUriString =
+                'content://com.android.externalstorage.documents/document/primary%3ADownload%2FRoadDataCollector';
+            final baseUri = Uri.parse(baseUriString);
+            print("Fallback: Attempting to launch base URI: $baseUriString");
+
+            final bool baseLaunched = await launchUrl(
+              baseUri,
+              mode: LaunchMode.externalApplication,
+            );
+
+            if (!baseLaunched) {
+              print("Base fallback also failed");
+              // Last resort: try using more generic storage URI
+              final storageUri = Uri.parse(
+                'content://com.android.externalstorage.documents/document/primary',
+              );
+              print(
+                'Last resort: Attempting to launch storage URI: $storageUri',
+              );
+
+              if (await canLaunchUrl(storageUri)) {
+                return await launchUrl(
+                  storageUri,
+                  mode: LaunchMode.externalApplication,
+                );
+              }
+              return false;
+            }
+            return true;
+          }
+          return true;
+        } catch (e) {
+          print("Error launching URL $uriString: $e");
+
+          // Try fallback to generic storage browser
+          final storageUri = Uri.parse(
+            'content://com.android.externalstorage.documents/document/primary',
+          );
+          print('Fallback: Attempting to launch storage URI: $storageUri');
+
+          if (await canLaunchUrl(storageUri)) {
+            return await launchUrl(
+              storageUri,
+              mode: LaunchMode.externalApplication,
+            );
+          }
+          return false;
+        }
       } else if (Platform.isIOS) {
-        // iOS doesn't have a standard file explorer, so this is not applicable
+        // iOS doesn't support direct folder opening
+        print('Opening folder in file explorer is not supported on iOS');
         return false;
       }
+
       return false;
     } catch (e) {
-      // Log error in a real application
+      print('Error opening directory in file explorer: $e');
       return false;
     }
   }

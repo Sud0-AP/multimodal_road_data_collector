@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -20,29 +21,67 @@ class RecordingsListScreen extends ConsumerStatefulWidget {
 
 class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
     with WidgetsBindingObserver {
+  // Flag to prevent multiple simultaneous load operations
+  bool _isInitialLoadComplete = false;
+  bool _isLoadingInProgress = false;
+
+  // Throttle timer for preventing too frequent reloads
+  Timer? _loadThrottleTimer;
+
   @override
   void initState() {
     super.initState();
     // Register the observer to listen for app lifecycle changes
     WidgetsBinding.instance.addObserver(this);
-    // Load recordings when screen is first displayed
-    Future.microtask(
-      () => ref.read(recordingsNotifierProvider.notifier).loadRecordings(),
-    );
+
+    // Load recordings when screen is first displayed - with a small delay
+    // to allow the widget tree to settle
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        _loadRecordingsThrottled();
+      }
+    });
   }
 
   @override
   void dispose() {
     // Remove the observer when the widget is disposed
     WidgetsBinding.instance.removeObserver(this);
+    _loadThrottleTimer?.cancel();
     super.dispose();
+  }
+
+  // Throttled loading method to prevent multiple close-together calls
+  void _loadRecordingsThrottled() {
+    // If there's already a load in progress, don't start another
+    if (_isLoadingInProgress) {
+      return;
+    }
+
+    // If a throttle timer is active, cancel previous and set a new one
+    if (_loadThrottleTimer?.isActive ?? false) {
+      _loadThrottleTimer?.cancel();
+    }
+
+    // Set timer to actually perform the load
+    _loadThrottleTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _isLoadingInProgress = true;
+        ref.read(recordingsNotifierProvider.notifier).loadRecordings().then((
+          _,
+        ) {
+          _isLoadingInProgress = false;
+          _isInitialLoadComplete = true;
+        });
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Refresh recordings when app is resumed
-    if (state == AppLifecycleState.resumed) {
-      ref.read(recordingsNotifierProvider.notifier).loadRecordings();
+    if (state == AppLifecycleState.resumed && _isInitialLoadComplete) {
+      _loadRecordingsThrottled();
     }
   }
 
@@ -50,8 +89,11 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh when user navigates back to this screen
-    ref.read(recordingsNotifierProvider.notifier).loadRecordings();
+
+    // Refresh when user navigates back to this screen, but only after initial load
+    if (_isInitialLoadComplete) {
+      _loadRecordingsThrottled();
+    }
   }
 
   @override
@@ -64,9 +106,7 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.read(recordingsNotifierProvider.notifier).loadRecordings();
-            },
+            onPressed: _loadRecordingsThrottled,
             tooltip: 'Refresh',
           ),
         ],
@@ -101,9 +141,7 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
             Text(state.errorMessage ?? 'Unknown error'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () {
-                ref.read(recordingsNotifierProvider.notifier).loadRecordings();
-              },
+              onPressed: _loadRecordingsThrottled,
               child: const Text('Try Again'),
             ),
           ],
@@ -193,7 +231,9 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
     // Show the list of recordings
     return RefreshIndicator(
       onRefresh: () async {
-        await ref.read(recordingsNotifierProvider.notifier).loadRecordings();
+        _loadRecordingsThrottled();
+        // Wait for the throttle to complete
+        return await Future.delayed(const Duration(milliseconds: 800));
       },
       child: ListView.builder(
         itemCount: state.recordings.length,
@@ -210,6 +250,7 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
                 state.isSharingRecording
                     ? null
                     : () => _shareRecording(recording),
+            onViewInFolder: () => _viewInFolder(recording),
           );
         },
       ),
@@ -248,14 +289,22 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
           .read(recordingsNotifierProvider.notifier)
           .deleteRecording(recording.sessionPath);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success ? 'Recording deleted' : 'Failed to delete recording',
+      if (context.mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recording deleted successfully'),
+              backgroundColor: Colors.green,
             ),
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to delete recording'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -265,9 +314,29 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
         .read(recordingsNotifierProvider.notifier)
         .shareRecording(recording.sessionPath);
 
-    if (mounted && !success) {
+    if (context.mounted) {
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to share recording'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _viewInFolder(RecordingDisplayInfo recording) async {
+    final success = await ref
+        .read(recordingsNotifierProvider.notifier)
+        .openSessionInFileExplorer(recording.sessionPath);
+
+    if (context.mounted && !success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to share recording')),
+        const SnackBar(
+          content: Text('Could not open folder in file explorer'),
+          backgroundColor: Colors.orange,
+        ),
       );
     }
   }

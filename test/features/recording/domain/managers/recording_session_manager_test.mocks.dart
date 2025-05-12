@@ -323,6 +323,73 @@ class MockFileStorageService extends _i1.Mock
           as _i3.Future<String?>);
 
   @override
+  _i3.Future<String> createNewSessionDirectory() =>
+      (super.noSuchMethod(
+            Invocation.method(#createNewSessionDirectory, []),
+            returnValue: _i3.Future<String>.value(
+              _i6.dummyValue<String>(
+                this,
+                Invocation.method(#createNewSessionDirectory, []),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
+  _i3.Future<bool> writeMetadata(
+    String? metadataContent,
+    String? sessionPath,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#writeMetadata, [metadataContent, sessionPath]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<Map<String, String>?> readMetadataSummary(
+    String? sessionPath, [
+    List<String>? keysToRead,
+  ]) =>
+      (super.noSuchMethod(
+            Invocation.method(#readMetadataSummary, [sessionPath, keysToRead]),
+            returnValue: _i3.Future<Map<String, String>?>.value(),
+          )
+          as _i3.Future<Map<String, String>?>);
+
+  @override
+  _i3.Future<List<String>> listRecordingSessionPaths() =>
+      (super.noSuchMethod(
+            Invocation.method(#listRecordingSessionPaths, []),
+            returnValue: _i3.Future<List<String>>.value(<String>[]),
+          )
+          as _i3.Future<List<String>>);
+
+  @override
+  _i3.Future<List<String>> getSessionFilePathsForSharing(String? sessionPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#getSessionFilePathsForSharing, [sessionPath]),
+            returnValue: _i3.Future<List<String>>.value(<String>[]),
+          )
+          as _i3.Future<List<String>>);
+
+  @override
+  _i3.Future<bool> deleteDirectoryRecursive(String? directoryPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteDirectoryRecursive, [directoryPath]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> openDirectoryInFileExplorer(String? directoryPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#openDirectoryInFileExplorer, [directoryPath]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
   _i3.Future<String> createSessionDirectory() =>
       (super.noSuchMethod(
             Invocation.method(#createSessionDirectory, []),
@@ -430,6 +497,46 @@ class MockFileStorageService extends _i1.Mock
             Invocation.method(#appendToSensorDataCsv, [
               sessionDirectory,
               dataPoints,
+            ]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<String> getAnnotationsLogPath(
+    String? sessionDirectory, {
+    bool? createIfNotExists = false,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #getAnnotationsLogPath,
+              [sessionDirectory],
+              {#createIfNotExists: createIfNotExists},
+            ),
+            returnValue: _i3.Future<String>.value(
+              _i6.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #getAnnotationsLogPath,
+                  [sessionDirectory],
+                  {#createIfNotExists: createIfNotExists},
+                ),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
+  _i3.Future<bool> logAnnotation(
+    String? sessionDirectory,
+    int? spikeTimestampMs,
+    String? feedbackType,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#logAnnotation, [
+              sessionDirectory,
+              spikeTimestampMs,
+              feedbackType,
             ]),
             returnValue: _i3.Future<bool>.value(false),
           )

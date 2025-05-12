@@ -4,7 +4,10 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i3;
+import 'dart:ui' as _i11;
 
+import 'package:flutter/material.dart' as _i12;
+import 'package:flutter_riverpod/flutter_riverpod.dart' as _i10;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i4;
 import 'package:multimodal_road_data_collector/core/services/camera_service.dart'
@@ -13,8 +16,13 @@ import 'package:multimodal_road_data_collector/core/services/file_storage_servic
     as _i5;
 import 'package:multimodal_road_data_collector/core/services/permission_service.dart'
     as _i7;
+import 'package:multimodal_road_data_collector/features/recording/domain/managers/recording_session_manager.dart'
+    as _i8;
 import 'package:multimodal_road_data_collector/features/recording/domain/models/corrected_sensor_data_point.dart'
     as _i6;
+import 'package:multimodal_road_data_collector/features/recording/presentation/providers/recording_lifecycle_provider.dart'
+    as _i9;
+import 'package:state_notifier/state_notifier.dart' as _i13;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -273,6 +281,73 @@ class MockFileStorageService extends _i1.Mock
           as _i3.Future<String?>);
 
   @override
+  _i3.Future<String> createNewSessionDirectory() =>
+      (super.noSuchMethod(
+            Invocation.method(#createNewSessionDirectory, []),
+            returnValue: _i3.Future<String>.value(
+              _i4.dummyValue<String>(
+                this,
+                Invocation.method(#createNewSessionDirectory, []),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
+  _i3.Future<bool> writeMetadata(
+    String? metadataContent,
+    String? sessionPath,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#writeMetadata, [metadataContent, sessionPath]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<Map<String, String>?> readMetadataSummary(
+    String? sessionPath, [
+    List<String>? keysToRead,
+  ]) =>
+      (super.noSuchMethod(
+            Invocation.method(#readMetadataSummary, [sessionPath, keysToRead]),
+            returnValue: _i3.Future<Map<String, String>?>.value(),
+          )
+          as _i3.Future<Map<String, String>?>);
+
+  @override
+  _i3.Future<List<String>> listRecordingSessionPaths() =>
+      (super.noSuchMethod(
+            Invocation.method(#listRecordingSessionPaths, []),
+            returnValue: _i3.Future<List<String>>.value(<String>[]),
+          )
+          as _i3.Future<List<String>>);
+
+  @override
+  _i3.Future<List<String>> getSessionFilePathsForSharing(String? sessionPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#getSessionFilePathsForSharing, [sessionPath]),
+            returnValue: _i3.Future<List<String>>.value(<String>[]),
+          )
+          as _i3.Future<List<String>>);
+
+  @override
+  _i3.Future<bool> deleteDirectoryRecursive(String? directoryPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteDirectoryRecursive, [directoryPath]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> openDirectoryInFileExplorer(String? directoryPath) =>
+      (super.noSuchMethod(
+            Invocation.method(#openDirectoryInFileExplorer, [directoryPath]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
   _i3.Future<String> createSessionDirectory() =>
       (super.noSuchMethod(
             Invocation.method(#createSessionDirectory, []),
@@ -384,6 +459,46 @@ class MockFileStorageService extends _i1.Mock
             returnValue: _i3.Future<bool>.value(false),
           )
           as _i3.Future<bool>);
+
+  @override
+  _i3.Future<String> getAnnotationsLogPath(
+    String? sessionDirectory, {
+    bool? createIfNotExists = false,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #getAnnotationsLogPath,
+              [sessionDirectory],
+              {#createIfNotExists: createIfNotExists},
+            ),
+            returnValue: _i3.Future<String>.value(
+              _i4.dummyValue<String>(
+                this,
+                Invocation.method(
+                  #getAnnotationsLogPath,
+                  [sessionDirectory],
+                  {#createIfNotExists: createIfNotExists},
+                ),
+              ),
+            ),
+          )
+          as _i3.Future<String>);
+
+  @override
+  _i3.Future<bool> logAnnotation(
+    String? sessionDirectory,
+    int? spikeTimestampMs,
+    String? feedbackType,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#logAnnotation, [
+              sessionDirectory,
+              spikeTimestampMs,
+              feedbackType,
+            ]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
 }
 
 /// A class which mocks [PermissionService].
@@ -449,4 +564,454 @@ class MockPermissionService extends _i1.Mock implements _i7.PermissionService {
             returnValue: _i3.Future<bool>.value(false),
           )
           as _i3.Future<bool>);
+}
+
+/// A class which mocks [RecordingSessionManager].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockRecordingSessionManager extends _i1.Mock
+    implements _i8.RecordingSessionManager {
+  MockRecordingSessionManager() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  set onBufferFull(
+    dynamic Function(List<_i6.CorrectedSensorDataPoint>)? _onBufferFull,
+  ) => super.noSuchMethod(
+    Invocation.setter(#onBufferFull, _onBufferFull),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set onCsvWriteError(dynamic Function(String)? _onCsvWriteError) =>
+      super.noSuchMethod(
+        Invocation.setter(#onCsvWriteError, _onCsvWriteError),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  _i3.Future<void> initialize() =>
+      (super.noSuchMethod(
+            Invocation.method(#initialize, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  void setSessionDirectory(String? sessionDirectory) => super.noSuchMethod(
+    Invocation.method(#setSessionDirectory, [sessionDirectory]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i3.Stream<_i8.ProcessedSensorData> getProcessedSensorStream() =>
+      (super.noSuchMethod(
+            Invocation.method(#getProcessedSensorStream, []),
+            returnValue: _i3.Stream<_i8.ProcessedSensorData>.empty(),
+          )
+          as _i3.Stream<_i8.ProcessedSensorData>);
+
+  @override
+  _i3.Stream<_i8.CsvWriteResult> getCsvWriteStatusStream() =>
+      (super.noSuchMethod(
+            Invocation.method(#getCsvWriteStatusStream, []),
+            returnValue: _i3.Stream<_i8.CsvWriteResult>.empty(),
+          )
+          as _i3.Stream<_i8.CsvWriteResult>);
+
+  @override
+  List<_i6.CorrectedSensorDataPoint> getBufferedDataPoints() =>
+      (super.noSuchMethod(
+            Invocation.method(#getBufferedDataPoints, []),
+            returnValue: <_i6.CorrectedSensorDataPoint>[],
+          )
+          as List<_i6.CorrectedSensorDataPoint>);
+
+  @override
+  bool updateDataPoint(_i6.CorrectedSensorDataPoint? updatedDataPoint) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateDataPoint, [updatedDataPoint]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  _i3.Future<int> updateDataPointsInWindow(
+    int? startTimestampMs,
+    int? endTimestampMs,
+    bool? isPothole,
+    String? userFeedback,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateDataPointsInWindow, [
+              startTimestampMs,
+              endTimestampMs,
+              isPothole,
+              userFeedback,
+            ]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  void clearBuffer() => super.noSuchMethod(
+    Invocation.method(#clearBuffer, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i3.Future<List<_i6.CorrectedSensorDataPoint>> flushBuffer() =>
+      (super.noSuchMethod(
+            Invocation.method(#flushBuffer, []),
+            returnValue: _i3.Future<List<_i6.CorrectedSensorDataPoint>>.value(
+              <_i6.CorrectedSensorDataPoint>[],
+            ),
+          )
+          as _i3.Future<List<_i6.CorrectedSensorDataPoint>>);
+
+  @override
+  void setBufferFullCallback(
+    dynamic Function(List<_i6.CorrectedSensorDataPoint>)? callback,
+  ) => super.noSuchMethod(
+    Invocation.method(#setBufferFullCallback, [callback]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void setCsvWriteErrorCallback(dynamic Function(String)? callback) =>
+      super.noSuchMethod(
+        Invocation.method(#setCsvWriteErrorCallback, [callback]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  int getTotalRowsWritten() =>
+      (super.noSuchMethod(
+            Invocation.method(#getTotalRowsWritten, []),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
+  int getFailedWriteAttempts() =>
+      (super.noSuchMethod(
+            Invocation.method(#getFailedWriteAttempts, []),
+            returnValue: 0,
+          )
+          as int);
+
+  @override
+  _i3.Future<bool> waitForPendingWrites({Duration? timeout}) =>
+      (super.noSuchMethod(
+            Invocation.method(#waitForPendingWrites, [], {#timeout: timeout}),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<void> startSensorDataCollection() =>
+      (super.noSuchMethod(
+            Invocation.method(#startSensorDataCollection, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> stopSensorDataCollection() =>
+      (super.noSuchMethod(
+            Invocation.method(#stopSensorDataCollection, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  void setCalibrationParameters({
+    double? accelZOffset = 0.0,
+    double? gyroZOffset = 0.0,
+    bool? swapXY = false,
+  }) => super.noSuchMethod(
+    Invocation.method(#setCalibrationParameters, [], {
+      #accelZOffset: accelZOffset,
+      #gyroZOffset: gyroZOffset,
+      #swapXY: swapXY,
+    }),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void setSessionCalibrationParameters({
+    required double? sessionAccelOffsetZ,
+    required double? gyroZDrift,
+    required double? bumpThreshold,
+    bool? useSessionParameters = true,
+  }) => super.noSuchMethod(
+    Invocation.method(#setSessionCalibrationParameters, [], {
+      #sessionAccelOffsetZ: sessionAccelOffsetZ,
+      #gyroZDrift: gyroZDrift,
+      #bumpThreshold: bumpThreshold,
+      #useSessionParameters: useSessionParameters,
+    }),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void clearSessionCalibrationParameters() => super.noSuchMethod(
+    Invocation.method(#clearSessionCalibrationParameters, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  bool isDataCollectionActive() =>
+      (super.noSuchMethod(
+            Invocation.method(#isDataCollectionActive, []),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  bool isInitialCalibrationDone() =>
+      (super.noSuchMethod(
+            Invocation.method(#isInitialCalibrationDone, []),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  _i3.Future<void> dispose() =>
+      (super.noSuchMethod(
+            Invocation.method(#dispose, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> startSession(String? sessionDirectory) =>
+      (super.noSuchMethod(
+            Invocation.method(#startSession, [sessionDirectory]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> stopSession() =>
+      (super.noSuchMethod(
+            Invocation.method(#stopSession, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+}
+
+/// A class which mocks [RecordingLifecycleNotifier].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockRecordingLifecycleNotifier extends _i1.Mock
+    implements _i9.RecordingLifecycleNotifier {
+  MockRecordingLifecycleNotifier() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  bool get mounted =>
+      (super.noSuchMethod(Invocation.getter(#mounted), returnValue: false)
+          as bool);
+
+  @override
+  _i3.Stream<bool> get stream =>
+      (super.noSuchMethod(
+            Invocation.getter(#stream),
+            returnValue: _i3.Stream<bool>.empty(),
+          )
+          as _i3.Stream<bool>);
+
+  @override
+  bool get state =>
+      (super.noSuchMethod(Invocation.getter(#state), returnValue: false)
+          as bool);
+
+  @override
+  bool get debugState =>
+      (super.noSuchMethod(Invocation.getter(#debugState), returnValue: false)
+          as bool);
+
+  @override
+  bool get hasListeners =>
+      (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
+          as bool);
+
+  @override
+  set onError(_i10.ErrorListener? _onError) => super.noSuchMethod(
+    Invocation.setter(#onError, _onError),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set state(bool? value) => super.noSuchMethod(
+    Invocation.setter(#state, value),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void dispose() => super.noSuchMethod(
+    Invocation.method(#dispose, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i3.Future<void> startRecording(String? sessionDirectory) =>
+      (super.noSuchMethod(
+            Invocation.method(#startRecording, [sessionDirectory]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> stopRecording() =>
+      (super.noSuchMethod(
+            Invocation.method(#stopRecording, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  void didChangeAppLifecycleState(_i11.AppLifecycleState? state) =>
+      super.noSuchMethod(
+        Invocation.method(#didChangeAppLifecycleState, [state]),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void didChangeAccessibilityFeatures() => super.noSuchMethod(
+    Invocation.method(#didChangeAccessibilityFeatures, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void didChangeLocales(List<_i11.Locale>? locales) => super.noSuchMethod(
+    Invocation.method(#didChangeLocales, [locales]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void didChangeMetrics() => super.noSuchMethod(
+    Invocation.method(#didChangeMetrics, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void didChangePlatformBrightness() => super.noSuchMethod(
+    Invocation.method(#didChangePlatformBrightness, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void didChangeTextScaleFactor() => super.noSuchMethod(
+    Invocation.method(#didChangeTextScaleFactor, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void didHaveMemoryPressure() => super.noSuchMethod(
+    Invocation.method(#didHaveMemoryPressure, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i3.Future<bool> didPopRoute() =>
+      (super.noSuchMethod(
+            Invocation.method(#didPopRoute, []),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> didPushRoute(String? route) =>
+      (super.noSuchMethod(
+            Invocation.method(#didPushRoute, [route]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  _i3.Future<bool> didPushRouteInformation(
+    _i12.RouteInformation? routeInformation,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#didPushRouteInformation, [routeInformation]),
+            returnValue: _i3.Future<bool>.value(false),
+          )
+          as _i3.Future<bool>);
+
+  @override
+  void didChangeViewFocus(Object? event) => super.noSuchMethod(
+    Invocation.method(#didChangeViewFocus, [event]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  _i3.Future<_i11.AppExitResponse> didRequestAppExit() =>
+      (super.noSuchMethod(
+            Invocation.method(#didRequestAppExit, []),
+            returnValue: _i3.Future<_i11.AppExitResponse>.value(
+              _i11.AppExitResponse.exit,
+            ),
+          )
+          as _i3.Future<_i11.AppExitResponse>);
+
+  @override
+  void handleCancelBackGesture() => super.noSuchMethod(
+    Invocation.method(#handleCancelBackGesture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void handleCommitBackGesture() => super.noSuchMethod(
+    Invocation.method(#handleCommitBackGesture, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  bool handleStartBackGesture(Object? backEvent) =>
+      (super.noSuchMethod(
+            Invocation.method(#handleStartBackGesture, [backEvent]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  void handleUpdateBackGestureProgress(Object? backEvent) => super.noSuchMethod(
+    Invocation.method(#handleUpdateBackGestureProgress, [backEvent]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  bool updateShouldNotify(bool? old, bool? current) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateShouldNotify, [old, current]),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  _i10.RemoveListener addListener(
+    _i13.Listener<bool>? listener, {
+    bool? fireImmediately = true,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #addListener,
+              [listener],
+              {#fireImmediately: fireImmediately},
+            ),
+            returnValue: () {},
+          )
+          as _i10.RemoveListener);
 }

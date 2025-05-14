@@ -3,6 +3,12 @@ class SettingsState {
   /// The multiplier value for bump detection threshold calculation
   final double bumpThresholdMultiplier;
 
+  /// Controls whether annotation prompts appear during recording
+  final bool annotationEnabled;
+
+  /// Controls whether debug logging is enabled
+  final bool debuggingModeEnabled;
+
   /// Indicates if settings are currently being saved
   final bool isSaving;
 
@@ -15,6 +21,8 @@ class SettingsState {
   /// Constructor
   const SettingsState({
     this.bumpThresholdMultiplier = 5.0,
+    this.annotationEnabled = true,
+    this.debuggingModeEnabled = false,
     this.isSaving = false,
     this.errorMessage,
     this.successMessage,
@@ -23,6 +31,8 @@ class SettingsState {
   /// Create a copy of this state with the given fields replaced
   SettingsState copyWith({
     double? bumpThresholdMultiplier,
+    bool? annotationEnabled,
+    bool? debuggingModeEnabled,
     bool? isSaving,
     String? errorMessage,
     String? successMessage,
@@ -30,6 +40,8 @@ class SettingsState {
     return SettingsState(
       bumpThresholdMultiplier:
           bumpThresholdMultiplier ?? this.bumpThresholdMultiplier,
+      annotationEnabled: annotationEnabled ?? this.annotationEnabled,
+      debuggingModeEnabled: debuggingModeEnabled ?? this.debuggingModeEnabled,
       isSaving: isSaving ?? this.isSaving,
       errorMessage: errorMessage ?? this.errorMessage,
       successMessage: successMessage ?? this.successMessage,

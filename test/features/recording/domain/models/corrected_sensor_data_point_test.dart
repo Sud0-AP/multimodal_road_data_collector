@@ -13,7 +13,7 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         gyroZ: 0.3,
-        isPothole: true,
+        isBump: true,
         userFeedback: 'test feedback',
       );
 
@@ -25,7 +25,7 @@ void main() {
       expect(dataPoint.gyroX, equals(0.1));
       expect(dataPoint.gyroY, equals(0.2));
       expect(dataPoint.gyroZ, equals(0.3));
-      expect(dataPoint.isPothole, isTrue);
+      expect(dataPoint.isBump, isTrue);
       expect(dataPoint.userFeedback, equals('test feedback'));
     });
 
@@ -39,21 +39,21 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         gyroZ: 0.3,
-        isPothole: false,
+        isBump: false,
         userFeedback: '',
       );
 
       final copy = original.copyWith(
         timestampMs: 2000,
         accelZ: 9.8,
-        isPothole: true,
+        isBump: true,
         userFeedback: 'updated feedback',
       );
 
       // Verify updated fields
       expect(copy.timestampMs, equals(2000));
       expect(copy.accelZ, equals(9.8));
-      expect(copy.isPothole, isTrue);
+      expect(copy.isBump, isTrue);
       expect(copy.userFeedback, equals('updated feedback'));
 
       // Verify unchanged fields
@@ -75,7 +75,7 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         correctedGyroZ: 0.3,
-        isPothole: true,
+        isBump: true,
       );
 
       expect(dataPoint.timestampMs, equals(5000));
@@ -86,7 +86,7 @@ void main() {
       expect(dataPoint.gyroX, equals(0.1));
       expect(dataPoint.gyroY, equals(0.2));
       expect(dataPoint.gyroZ, equals(0.3));
-      expect(dataPoint.isPothole, isTrue);
+      expect(dataPoint.isBump, isTrue);
       expect(dataPoint.userFeedback, isEmpty);
     });
 
@@ -100,7 +100,7 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         gyroZ: 0.3,
-        isPothole: true,
+        isBump: true,
         userFeedback: 'feedback with, comma',
       );
 
@@ -134,7 +134,7 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         gyroZ: 0.3,
-        isPothole: false,
+        isBump: false,
         userFeedback: 'has,comma',
       );
 
@@ -147,7 +147,7 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         gyroZ: 0.3,
-        isPothole: false,
+        isBump: false,
         userFeedback: 'has"quote',
       );
 
@@ -161,6 +161,77 @@ void main() {
       expect(csvRow2.endsWith('"has""quote"'), isTrue);
     });
 
+    test('toCsvRow handles isBump and userFeedback independently', () {
+      // Test case 1: isBump=true with Yes feedback
+      final dataPoint1 = CorrectedSensorDataPoint(
+        timestampMs: 1000,
+        accelX: 1.0,
+        accelY: 2.0,
+        accelZ: 3.0,
+        accelMagnitude: 3.74,
+        gyroX: 0.1,
+        gyroY: 0.2,
+        gyroZ: 0.3,
+        isBump: true,
+        userFeedback: 'Yes',
+      );
+
+      // Test case 2: isBump=true with No feedback
+      final dataPoint2 = CorrectedSensorDataPoint(
+        timestampMs: 1000,
+        accelX: 1.0,
+        accelY: 2.0,
+        accelZ: 3.0,
+        accelMagnitude: 3.74,
+        gyroX: 0.1,
+        gyroY: 0.2,
+        gyroZ: 0.3,
+        isBump: true,
+        userFeedback: 'No',
+      );
+
+      // Test case 3: isBump=true with Uncategorized feedback
+      final dataPoint3 = CorrectedSensorDataPoint(
+        timestampMs: 1000,
+        accelX: 1.0,
+        accelY: 2.0,
+        accelZ: 3.0,
+        accelMagnitude: 3.74,
+        gyroX: 0.1,
+        gyroY: 0.2,
+        gyroZ: 0.3,
+        isBump: true,
+        userFeedback: 'Uncategorized',
+      );
+
+      final csvRow1 = dataPoint1.toCsvRow();
+      final csvRow2 = dataPoint2.toCsvRow();
+      final csvRow3 = dataPoint3.toCsvRow();
+
+      // Verify that isBump is always '1' when true, regardless of userFeedback
+      final parts1 = csvRow1.split(',');
+      final parts2 = csvRow2.split(',');
+      final parts3 = csvRow3.split(',');
+
+      expect(parts1[8], equals('1')); // isBump should be '1'
+      expect(parts1[9], equals('Yes')); // userFeedback should be as set
+
+      expect(
+        parts2[8],
+        equals('1'),
+      ); // isBump should be '1' even with 'No' feedback
+      expect(parts2[9], equals('No')); // userFeedback should be as set
+
+      expect(
+        parts3[8],
+        equals('1'),
+      ); // isBump should be '1' even with 'Uncategorized' feedback
+      expect(
+        parts3[9],
+        equals('Uncategorized'),
+      ); // userFeedback should be as set
+    });
+
     test('toString returns a readable string representation', () {
       final dataPoint = CorrectedSensorDataPoint(
         timestampMs: 1000,
@@ -171,7 +242,7 @@ void main() {
         gyroX: 0.1,
         gyroY: 0.2,
         gyroZ: 0.3,
-        isPothole: true,
+        isBump: true,
         userFeedback: 'test',
       );
 
@@ -186,7 +257,7 @@ void main() {
       expect(str, contains('gyroX: 0.1'));
       expect(str, contains('gyroY: 0.2'));
       expect(str, contains('gyroZ: 0.3'));
-      expect(str, contains('isPothole: true'));
+      expect(str, contains('isBump: true'));
       expect(str, contains('userFeedback: "test"'));
     });
   });

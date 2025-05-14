@@ -354,7 +354,7 @@ class RecordingSessionManager {
   Future<int> updateDataPointsInWindow(
     int startTimestampMs,
     int endTimestampMs,
-    bool isPothole,
+    bool isBump,
     String userFeedback,
   ) async {
     // First, update any matching data points in the buffer
@@ -366,7 +366,7 @@ class RecordingSessionManager {
       if (dataPoint.timestampMs >= startTimestampMs &&
           dataPoint.timestampMs <= endTimestampMs) {
         _sensorDataBuffer[i] = dataPoint.copyWith(
-          isPothole: isPothole,
+          isBump: isBump,
           userFeedback: userFeedback,
         );
         updatedCount++;
@@ -396,7 +396,7 @@ class RecordingSessionManager {
             if (line.isEmpty) continue;
 
             final columns = line.split(',');
-            // Make sure we have enough columns to access timestamp, isPothole, and userFeedback
+            // Make sure we have enough columns to access timestamp, isBump, and userFeedback
             if (columns.length >= 9) {
               try {
                 final timestampMs = int.parse(columns[0]);
@@ -404,9 +404,10 @@ class RecordingSessionManager {
                 // Check if this row is within our window
                 if (timestampMs >= startTimestampMs &&
                     timestampMs <= endTimestampMs) {
-                  // Create new columns array with the updated isPothole and userFeedback
+                  // Create new columns array with the updated isBump and userFeedback
                   final newColumns = List<String>.from(columns);
-                  newColumns[8] = isPothole ? '1' : '0'; // isPothole column
+                  // isBump column - use empty string for false/no bump
+                  newColumns[8] = isBump ? '1' : '';
 
                   // Handle user feedback (properly escape if needed)
                   String escapedUserFeedback = userFeedback;
@@ -440,7 +441,7 @@ class RecordingSessionManager {
           // Write the modified CSV back to the file if changes were made
           if (fileModified) {
             await csvFile.writeAsString(lines.join('\n'));
-            debugPrint('Updated CSV file on disk with pothole annotations');
+            debugPrint('Updated CSV file on disk with bump annotations');
           }
         }
       } catch (e) {
@@ -951,7 +952,7 @@ class RecordingSessionManager {
       gyroX: data.gyroscopeX,
       gyroY: data.gyroscopeY,
       correctedGyroZ: correctedGyroZ,
-      isPothole:
+      isBump:
           false, // Always initialize to false, will be updated by SpikeDetectionService
     );
 

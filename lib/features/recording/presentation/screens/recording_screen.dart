@@ -22,6 +22,7 @@ import '../state/providers.dart';
 import '../widgets/pre_recording_calibration_overlay.dart';
 import '../widgets/annotation_prompt_overlay.dart';
 import '../../../recordings/presentation/providers/recordings_providers.dart';
+import '../../../settings/presentation/state/providers.dart';
 
 // Enum to define the position of buttons for different layout adjustments
 enum ButtonPosition { left, center, right }
@@ -336,8 +337,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       gyroX: data.rawData.gyroscopeX,
       gyroY: data.rawData.gyroscopeY,
       correctedGyroZ: data.correctedGyroZ,
-      isPothole:
-          false, // Initialize to false, will be updated below if detected
+      isBump: false, // Initialize to false, will be updated below if detected
     );
 
     // Process the data point and check if a spike was detected
@@ -345,85 +345,86 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       correctedDataPoint,
     );
 
-    // Update the isPothole flag in the data point if a spike was detected
-    // This ensures CSV data correctly reflects actual detected potholes (not false positives)
-    final correctedDataPointWithPotholeFlag =
+    // Update the isBump flag in the data point if a spike was detected
+    // This ensures CSV data correctly reflects actual detected bumps (not false positives)
+    final correctedDataPointWithBumpFlag =
         spikeDetected
-            ? correctedDataPoint.copyWith(isPothole: true)
+            ? correctedDataPoint.copyWith(isBump: true)
             : correctedDataPoint;
 
-    // Try to update the buffer with the corrected data point (with proper isPothole flag)
+    // Try to update the buffer with the corrected data point (with proper isBump flag)
     // This might fail if the data has already been flushed to disk
     final updated = _recordingSessionManager.updateDataPoint(
-      correctedDataPointWithPotholeFlag,
+      correctedDataPointWithBumpFlag,
     );
 
-    // If it's a pothole detection and we couldn't update it in the buffer (already written)
-    // we should log this special case (as the CSV will have incorrect isPothole flags)
+    // If it's a bump detection and we couldn't update it in the buffer (already written)
+    // we should log this special case (as the CSV will have incorrect isBump flags)
     if (spikeDetected && !updated) {
       // Consider logging this special case for debugging
       debugPrint(
-        '⚠️ Pothole was detected but data point was already written to CSV',
+        '⚠️ Bump was detected but data point was already written to CSV',
       );
     }
 
-    // If a spike is detected, show the annotation prompt
+    // If a spike is detected, either show annotation prompt or auto-mark as UNM based on settings
     if (spikeDetected && mounted) {
-      // Get or create an AnnotationPromptOverlay
-      final annotationOverlay = AnnotationPromptOverlay(context);
+      // Get the last spike timestamp
+      final spikeTimestamp =
+          ref.read(spikeDetectionProvider).lastSpikeTimestampMs;
+      if (spikeTimestamp != null) {
+        // Get the annotation setting from the settings provider
+        final settings = ref.read(settingsProvider);
+        final showAnnotationPrompts = settings.annotationEnabled;
 
-      // Show the overlay with callback to log the annotation
-      annotationOverlay.show(
-        onResponse: (String response) {
-          // Get the last spike timestamp
-          final spikeTimestamp =
-              ref.read(spikeDetectionProvider).lastSpikeTimestampMs;
-          if (spikeTimestamp != null) {
-            // Log the annotation
-            _fileStorageService.logAnnotation(
-              sessionPath,
-              spikeTimestamp,
-              response,
-            );
+        if (showAnnotationPrompts) {
+          // Get or create an AnnotationPromptOverlay
+          final annotationOverlay = AnnotationPromptOverlay(context);
 
-            // Update the isPothole flag and user feedback for ALL data points in the
-            // window (5 seconds before and 5 seconds after the spike)
-            // Calculate window boundaries (5 seconds = ~500 data points at 100Hz)
-            final windowStartMs = spikeTimestamp - 5000; // 5 seconds before
-            final windowEndMs = spikeTimestamp + 5000; // 5 seconds after
-
-            // Set isPothole based on user response
-            // Yes = true, No = false, Uncategorized = -1 (special case)
-            bool isPothole = false;
-            if (response == 'Yes') {
-              isPothole = true;
-            } else if (response == 'Uncategorized') {
-              // For Uncategorized, we'll still mark it in the CSV
-              // but with a special flag indicating timeout/uncategorized
-              isPothole = false; // In CSV we'll use 0 for Uncategorized as well
-            }
-
-            // Update all data points in the time window using the more efficient method
-            _recordingSessionManager
-                .updateDataPointsInWindow(
-                  windowStartMs,
-                  windowEndMs,
-                  isPothole,
-                  response,
-                )
-                .then((updatedCount) {
-                  debugPrint(
-                    'Updated $updatedCount data points for annotation window',
-                  );
-                });
-
-            debugPrint(
-              'Annotation logged: $spikeTimestamp,$response with window [$windowStartMs-$windowEndMs]ms',
-            );
-          }
-        },
-      );
+          // Show the overlay with callback to log the annotation
+          annotationOverlay.show(
+            onResponse: (String response) {
+              _handleAnnotationResponse(sessionPath, spikeTimestamp, response);
+            },
+          );
+        } else {
+          // Automatically mark as UNM without showing the prompt
+          _handleAnnotationResponse(sessionPath, spikeTimestamp, 'UNM');
+        }
+      }
     }
+  }
+
+  // Handle annotation response (extracted to a separate method for reuse)
+  void _handleAnnotationResponse(
+    String sessionPath,
+    int spikeTimestamp,
+    String response,
+  ) {
+    // Log the annotation
+    _fileStorageService.logAnnotation(sessionPath, spikeTimestamp, response);
+
+    // Update the isBump flag and user feedback for ALL data points in the
+    // window (5 seconds before and 5 seconds after the spike)
+    // Calculate window boundaries (5 seconds = ~500 data points at 100Hz)
+    final windowStartMs = spikeTimestamp - 5000; // 5 seconds before
+    final windowEndMs = spikeTimestamp + 5000; // 5 seconds after
+
+    // Always keep isBump as true for detected bumps
+    // This ensures isBump flag is independent of user feedback
+    bool isBump = true;
+
+    // Update data points in the window with the correct isBump and userFeedback values
+    _recordingSessionManager.updateDataPointsInWindow(
+      windowStartMs,
+      windowEndMs,
+      isBump,
+      response,
+    );
+
+    debugPrint(
+      'Annotation logged: $spikeTimestamp,$response with window [$windowStartMs-$windowEndMs]ms',
+    );
   }
 
   // Stop recording

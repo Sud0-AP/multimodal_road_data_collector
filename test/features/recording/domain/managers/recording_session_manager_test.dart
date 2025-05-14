@@ -701,7 +701,8 @@ void main() {
           gyroX: 0.1 + i * 0.01,
           gyroY: 0.2 + i * 0.01,
           gyroZ: 0.3 + i * 0.01,
-          isPothole: i % 3 == 0, // Every third point is a pothole
+          isBump: i % 3 == 0, // Every third point is a bump
+          userFeedback: i % 3 == 0 ? 'Yes' : '',
         ),
       );
 
@@ -985,13 +986,13 @@ void main() {
     final mockSensorService = MockSensorService();
     final mockNtpService = MockNtpService();
     final mockFileStorageService = MockFileStorageService();
-    
+
     final sessionManager = RecordingSessionManager(
       mockSensorService,
-      mockNtpService, 
+      mockNtpService,
       mockFileStorageService,
     );
-    
+
     final testSessionDir = '/test/session';
     final dataPoints = [
       CorrectedSensorDataPoint(
@@ -1003,7 +1004,8 @@ void main() {
         gyroX: 0.01,
         gyroY: 0.02,
         gyroZ: 0.03,
-        isPothole: false,
+        isBump: false,
+        userFeedback: '',
       ),
       CorrectedSensorDataPoint(
         timestampMs: 10,
@@ -1014,34 +1016,44 @@ void main() {
         gyroX: 0.04,
         gyroY: 0.05,
         gyroZ: 0.06,
-        isPothole: true,
+        isBump: true,
+        userFeedback: 'Yes',
       ),
     ];
-    
+
     // Setup mock responses
-    when(mockFileStorageService.getSensorDataCsvPath(
-      testSessionDir, 
-      createIfNotExists: true,
-    )).thenAnswer((_) async => '$testSessionDir/sensors.csv');
-    
-    when(mockFileStorageService.createDirectory(testSessionDir))
-        .thenAnswer((_) async => true);
-        
-    when(mockFileStorageService.writeStringToFile(
-      any, 
-      '$testSessionDir/test_write_access.tmp',
-    )).thenAnswer((_) async => true);
-    
-    when(mockFileStorageService.deleteFile(
-      '$testSessionDir/test_write_access.tmp',
-    )).thenAnswer((_) async => true);
-    
+    when(
+      mockFileStorageService.getSensorDataCsvPath(
+        testSessionDir,
+        createIfNotExists: true,
+      ),
+    ).thenAnswer((_) async => '$testSessionDir/sensors.csv');
+
+    when(
+      mockFileStorageService.createDirectory(testSessionDir),
+    ).thenAnswer((_) async => true);
+
+    when(
+      mockFileStorageService.writeStringToFile(
+        any,
+        '$testSessionDir/test_write_access.tmp',
+      ),
+    ).thenAnswer((_) async => true);
+
+    when(
+      mockFileStorageService.deleteFile(
+        '$testSessionDir/test_write_access.tmp',
+      ),
+    ).thenAnswer((_) async => true);
+
     // First call fails, second succeeds to test retry mechanism
     final csvRows = dataPoints.map((point) => point.toCsvRow()).toList();
-    when(mockFileStorageService.appendToCsv(
-      '$testSessionDir/sensors.csv', 
-      csvRows,
-    )).thenAnswer((_) async {
+    when(
+      mockFileStorageService.appendToCsv(
+        '$testSessionDir/sensors.csv',
+        csvRows,
+      ),
+    ).thenAnswer((_) async {
       // First call fails, subsequent calls succeed
       if (csvFailCounter == 0) {
         csvFailCounter++;
@@ -1049,35 +1061,38 @@ void main() {
       }
       return true;
     });
-    
+
     // Capture CSV write status events
     final List<CsvWriteResult> writeResults = [];
     sessionManager.getCsvWriteStatusStream().listen((result) {
       writeResults.add(result);
     });
-    
+
     // Set error callback
     String? errorMessage;
     sessionManager.setCsvWriteErrorCallback((msg) {
       errorMessage = msg;
     });
-    
+
     // Set session directory
     sessionManager.setSessionDirectory(testSessionDir);
-    
+
     // Act
     final flushedData = await sessionManager.flushBuffer();
-    
+
     // Wait for both attempts (fail + retry)
     await Future.delayed(Duration(milliseconds: 1500));
-    
+
     // Assert
     expect(flushedData, isEmpty); // No data in buffer initially
     expect(writeResults.length, 2); // First attempt failed, second succeeded
     expect(writeResults[0].success, false); // First attempt failed
-    expect(writeResults[1].success, true); // Second attempt succeeded after retry
+    expect(
+      writeResults[1].success,
+      true,
+    ); // Second attempt succeeded after retry
     expect(errorMessage, isNull); // No critical error since retry succeeded
-    
+
     // Reset counter for other tests
     csvFailCounter = 0;
   });

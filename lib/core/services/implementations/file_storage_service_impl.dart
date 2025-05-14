@@ -432,7 +432,7 @@ class FileStorageServiceImpl implements FileStorageService {
     'gyro_x',
     'gyro_y',
     'gyro_z',
-    'is_pothole',
+    'is_bump',
     'user_feedback',
   ];
 
@@ -506,7 +506,7 @@ class FileStorageServiceImpl implements FileStorageService {
         'gyro_x',
         'gyro_y',
         'gyro_z',
-        'is_pothole',
+        'is_bump',
         'user_feedback',
       ];
       await createCsvWithHeader(csvPath, headers);

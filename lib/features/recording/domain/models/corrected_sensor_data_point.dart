@@ -28,7 +28,7 @@ class CorrectedSensorDataPoint {
   final double gyroZ;
 
   /// Whether this data point represents a pothole/bump detection
-  final bool isPothole;
+  final bool isBump;
 
   /// User feedback for this data point (if any)
   final String userFeedback;
@@ -43,7 +43,7 @@ class CorrectedSensorDataPoint {
     required this.gyroX,
     required this.gyroY,
     required this.gyroZ,
-    this.isPothole = false,
+    this.isBump = false,
     this.userFeedback = '',
   });
 
@@ -57,7 +57,7 @@ class CorrectedSensorDataPoint {
     double? gyroX,
     double? gyroY,
     double? gyroZ,
-    bool? isPothole,
+    bool? isBump,
     String? userFeedback,
   }) {
     return CorrectedSensorDataPoint(
@@ -69,7 +69,7 @@ class CorrectedSensorDataPoint {
       gyroX: gyroX ?? this.gyroX,
       gyroY: gyroY ?? this.gyroY,
       gyroZ: gyroZ ?? this.gyroZ,
-      isPothole: isPothole ?? this.isPothole,
+      isBump: isBump ?? this.isBump,
       userFeedback: userFeedback ?? this.userFeedback,
     );
   }
@@ -84,7 +84,7 @@ class CorrectedSensorDataPoint {
     required double gyroX,
     required double gyroY,
     required double correctedGyroZ,
-    bool isPothole = false,
+    bool isBump = false,
     String userFeedback = '',
   }) {
     return CorrectedSensorDataPoint(
@@ -96,7 +96,7 @@ class CorrectedSensorDataPoint {
       gyroX: gyroX,
       gyroY: gyroY,
       gyroZ: correctedGyroZ,
-      isPothole: isPothole,
+      isBump: isBump,
       userFeedback: userFeedback,
     );
   }
@@ -109,14 +109,9 @@ class CorrectedSensorDataPoint {
             ? '"${userFeedback.replaceAll('"', '""')}"' // Double quotes are escaped with double quotes in CSV
             : userFeedback;
 
-    // Handle the isPothole field
-    // - 1 = Yes (confirmed pothole)
-    // - 0 = No (confirmed not a pothole) or no feedback
-    // If userFeedback is "Uncategorized", this is still marked as 0 but the feedback field will indicate it
-    String isPotholeValue = '0';
-    if (isPothole) {
-      isPotholeValue = '1';
-    }
+    // CHANGED: Handle the isBump field - always output '1' when true
+    // This ensures isBump column is independent of user feedback
+    String isBumpValue = isBump ? '1' : '';
 
     return [
       timestampMs.toString(),
@@ -127,7 +122,7 @@ class CorrectedSensorDataPoint {
       gyroX.toString(),
       gyroY.toString(),
       gyroZ.toString(),
-      isPotholeValue,
+      isBumpValue,
       escapedUserFeedback,
     ].join(',');
   }
@@ -138,6 +133,6 @@ class CorrectedSensorDataPoint {
         'accelX: $accelX, accelY: $accelY, accelZ: $accelZ, '
         'accelMagnitude: $accelMagnitude, '
         'gyroX: $gyroX, gyroY: $gyroY, gyroZ: $gyroZ, '
-        'isPothole: $isPothole, userFeedback: "$userFeedback")';
+        'isBump: $isBump, userFeedback: "$userFeedback")';
   }
 }

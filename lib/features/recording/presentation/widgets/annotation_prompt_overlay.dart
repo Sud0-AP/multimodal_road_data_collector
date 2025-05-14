@@ -95,7 +95,7 @@ class _AnnotationPromptWidgetState extends State<AnnotationPromptWidget>
 
   /// Handles timeout (no user response)
   void _handleTimeout() {
-    widget.onResponse('Uncategorized');
+    widget.onResponse('UNM');
     _timer?.cancel();
   }
 

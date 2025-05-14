@@ -312,7 +312,7 @@ void main() {
           'gyro_x',
           'gyro_y',
           'gyro_z',
-          'is_pothole',
+          'is_bump',
           'user_feedback',
         ]),
       );
@@ -361,7 +361,7 @@ void main() {
             gyroX: 0.1,
             gyroY: 0.2,
             gyroZ: 0.3,
-            isPothole: true,
+            isBump: true,
           ),
           CorrectedSensorDataPoint(
             timestampMs: 1010,
@@ -372,7 +372,7 @@ void main() {
             gyroX: 0.11,
             gyroY: 0.21,
             gyroZ: 0.31,
-            isPothole: false,
+            isBump: false,
           ),
         ];
 

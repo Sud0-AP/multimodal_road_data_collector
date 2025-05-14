@@ -10,6 +10,9 @@ class SettingsScreen extends ConsumerWidget {
   /// Route name for the settings screen
   static const routeName = '/settings';
 
+  // Track processed message IDs to prevent duplicates
+  static final Set<String> _processedMessageIds = <String>{};
+
   /// Creates a new [SettingsScreen]
   const SettingsScreen({super.key});
 
@@ -22,66 +25,118 @@ class SettingsScreen extends ConsumerWidget {
     // Get the notifier to update settings
     final notifier = ref.watch(settingsProvider.notifier);
 
-    // Show SnackBar when settings are saved successfully or there's an error
+    // Process messages that haven't been shown yet
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (settings.successMessage != null) {
+      // Generate a unique ID based on the message content
+      final String? successId =
+          settings.successMessage != null
+              ? 'success:${settings.successMessage}'
+              : null;
+
+      final String? errorId =
+          settings.errorMessage != null
+              ? 'error:${settings.errorMessage}'
+              : null;
+
+      // Check if we have a new success message
+      if (successId != null && !_processedMessageIds.contains(successId)) {
+        // Mark this message as processed
+        _processedMessageIds.add(successId);
+
+        // Show success message with app theme colors
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.white),
+                Icon(Icons.check_circle, color: colorScheme.primary),
                 const SizedBox(width: 12),
-                Expanded(child: Text(settings.successMessage!)),
+                Expanded(
+                  child: Text(
+                    settings.successMessage!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
               ],
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: theme.cardColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: colorScheme.primary.withOpacity(0.3),
+                width: 1,
+              ),
             ),
             action: SnackBarAction(
-              label: 'DISMISS',
-              textColor: Colors.white,
+              label: 'OK',
+              textColor: colorScheme.primary,
               onPressed: () {
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                notifier.clearMessages();
               },
             ),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
-        // Clear the message to prevent showing the SnackBar again on rebuild
+
+        // Clear the success message
         Future.microtask(() => notifier.clearMessages());
       }
+      // Check if we have a new error message
+      else if (errorId != null && !_processedMessageIds.contains(errorId)) {
+        // Mark this message as processed
+        _processedMessageIds.add(errorId);
 
-      if (settings.errorMessage != null) {
+        // Show error message with app theme colors
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                Icon(Icons.error, color: Colors.white),
+                Icon(Icons.error, color: colorScheme.error),
                 const SizedBox(width: 12),
-                Expanded(child: Text(settings.errorMessage!)),
+                Expanded(
+                  child: Text(
+                    settings.errorMessage!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
               ],
             ),
-            backgroundColor: Colors.red,
+            backgroundColor: theme.cardColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: colorScheme.error.withOpacity(0.3),
+                width: 1,
+              ),
             ),
             action: SnackBarAction(
-              label: 'DISMISS',
-              textColor: Colors.white,
+              label: 'OK',
+              textColor: colorScheme.error,
               onPressed: () {
                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                notifier.clearMessages();
               },
             ),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
-        // Clear the message to prevent showing the SnackBar again on rebuild
+
+        // Clear the error message
         Future.microtask(() => notifier.clearMessages());
+      }
+      // Always clear any messages after processing them
+      else if (settings.successMessage != null ||
+          settings.errorMessage != null) {
+        notifier.clearMessages();
+      }
+
+      // Cap the size of the processed messages set to prevent memory leaks
+      if (_processedMessageIds.length > 100) {
+        _processedMessageIds.clear();
       }
     });
 

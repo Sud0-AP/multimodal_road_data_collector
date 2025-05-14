@@ -45,6 +45,9 @@ class DataManagementServiceImpl implements DataManagementService {
             (recordingData['sessionAdjustedAccelZ'] as num).toDouble(),
         bumpThreshold: (recordingData['bumpThreshold'] as num).toDouble(),
         gyroZDrift: (recordingData['gyroZDrift'] as num).toDouble(),
+        calibrationTimestamp: recordingData['calibrationTimestamp'] as int?,
+        calibrationSamplesCount:
+            recordingData['calibrationSamplesCount'] as int? ?? 0,
         videoStartNtp: recordingData['videoStartNtp'] as DateTime?,
         videoEndNtp: recordingData['videoEndNtp'] as DateTime?,
         sensorStartNtp: recordingData['sensorStartNtp'] as DateTime?,
@@ -189,6 +192,19 @@ class DataManagementServiceImpl implements DataManagementService {
       metadataContent.writeln(
         'Pre-Recording Gyro Drift (degrees): $gyroZDriftStr',
       );
+
+      // Add calibration timestamp in human-readable format
+      final calibrationDateTime = DateTime.fromMillisecondsSinceEpoch(
+        data.calibrationTimestamp ?? DateTime.now().millisecondsSinceEpoch,
+      );
+      metadataContent.writeln(
+        'Calibration Timestamp: ${calibrationDateTime.toIso8601String()}',
+      );
+
+      // Add calibration samples count
+      metadataContent.writeln(
+        'Calibration Samples Count: ${data.calibrationSamplesCount}',
+      );
       metadataContent.writeln('');
 
       // Warnings/Log Section
@@ -247,85 +263,128 @@ class DataManagementServiceImpl implements DataManagementService {
     }
   }
 
+  /// Parses a duration string safely from metadata into seconds
+  /// Handles various formats that might be in the metadata file
+  int _parseDurationSafely(String? durationStr) {
+    if (durationStr == null || durationStr.isEmpty) {
+      return 0;
+    }
+
+    try {
+      // Try parsing as a simple integer first (most common case)
+      return int.parse(durationStr);
+    } catch (e) {
+      // Not a simple integer, try other formats
+      try {
+        // Remove any non-numeric characters except colons, periods, and commas
+        final cleaned = durationStr.replaceAll(RegExp(r'[^0-9:.,]'), '');
+
+        // Check if it might be in MM:SS format
+        if (cleaned.contains(':')) {
+          final parts = cleaned.split(':');
+          if (parts.length == 2) {
+            // MM:SS format
+            final minutes = int.tryParse(parts[0]) ?? 0;
+            final seconds = int.tryParse(parts[1]) ?? 0;
+            return (minutes * 60) + seconds;
+          } else if (parts.length == 3) {
+            // HH:MM:SS format
+            final hours = int.tryParse(parts[0]) ?? 0;
+            final minutes = int.tryParse(parts[1]) ?? 0;
+            final seconds = int.tryParse(parts[2]) ?? 0;
+            return (hours * 3600) + (minutes * 60) + seconds;
+          }
+        }
+
+        // Try parsing as a double (in case it has decimal points)
+        final doubleValue = double.tryParse(cleaned);
+        if (doubleValue != null) {
+          return doubleValue.round();
+        }
+
+        // If all else fails, return 0
+        return 0;
+      } catch (e) {
+        print('Error parsing duration "$durationStr": $e');
+        return 0;
+      }
+    }
+  }
+
   @override
   Future<Map<String, dynamic>?> getSessionDisplayInfo(
     String sessionPath,
   ) async {
     try {
-      // Read essential metadata
-      final metadataKeys = [
-        'Recording Duration (s)',
-        'Session ID',
-        'Video Resolution',
-      ];
+      final Directory sessionDir = Directory(sessionPath);
+      if (!await sessionDir.exists()) {
+        print('Session directory does not exist: $sessionPath');
+        return null;
+      }
 
-      final metadata = await _fileStorageService.readMetadataSummary(
-        sessionPath,
-        metadataKeys,
-      );
+      // Try to read metadata file
+      final File metadataFile = File('$sessionPath/metadata.txt');
+      final DateTime timestamp = await _getSessionTimestamp(sessionPath);
+      final String sessionId = path.basename(sessionPath);
 
-      if (metadata == null) {
-        // If metadata is missing, try to extract basic info from the path
-        final sessionId = path.basename(sessionPath);
-        DateTime? timestamp;
-
-        // Try to parse timestamp from sessionId
+      int durationSeconds = 0;
+      if (await metadataFile.exists()) {
         try {
-          // Expecting format: YYYYMMDD_HHMMSS
-          if (sessionId.contains('_')) {
-            timestamp = DateFormat('yyyyMMdd_HHmmss').parse(sessionId);
+          final metadata = await _readMetadataSummary(metadataFile);
+          // Look for the correct key - "Recording Duration (s)" in the metadata file
+          if (metadata.containsKey('Recording Duration (s)')) {
+            print(
+              'Found duration in metadata: ${metadata['Recording Duration (s)']}',
+            );
+            durationSeconds = _parseDurationSafely(
+              metadata['Recording Duration (s)'],
+            );
+          } else if (metadata.containsKey('duration')) {
+            // Fallback to alternate key
+            durationSeconds = _parseDurationSafely(metadata['duration']);
           }
         } catch (e) {
-          // If parsing fails, use directory's creation time
+          print('Error reading metadata file: $e');
+        }
+      }
+
+      // Check for video file and estimate duration ONLY if we couldn't read from metadata
+      final File videoFile = File('$sessionPath/video.mp4');
+      String? videoFileName;
+      if (await videoFile.exists()) {
+        videoFileName = 'video.mp4';
+
+        // Only estimate if we couldn't get a valid duration from metadata
+        if (durationSeconds <= 0) {
           try {
-            final dirStat = await Directory(sessionPath).stat();
-            timestamp = dirStat.changed;
+            final videoFileSize = await videoFile.length();
+            final videoSizeKB = videoFileSize ~/ 1024;
+            print('Video file size for estimation: $videoSizeKB KB');
+
+            if (videoSizeKB > 100) {
+              // Estimate duration based on video size (very rough estimate)
+              // Using higher KB/sec ratio for more realistic values
+              final estimatedDurationSeconds =
+                  videoSizeKB ~/ 1500; // More conservative estimate
+              if (estimatedDurationSeconds > 0) {
+                print(
+                  'Estimated duration from file size: $estimatedDurationSeconds seconds (fallback)',
+                );
+                durationSeconds = estimatedDurationSeconds;
+              }
+            }
           } catch (e) {
-            // If all fails, use current time
-            timestamp = DateTime.now();
+            print('Error estimating duration from file size: $e');
           }
         }
-
-        return {
-          'sessionId': sessionId,
-          'sessionPath': sessionPath,
-          'timestamp': timestamp ?? DateTime.now(),
-          'durationSeconds': 0, // Unknown duration
-          'videoFileName': 'video.mp4', // Assumed default
-          'sensorDataFileName': 'sensors.csv', // Assumed default
-        };
       }
 
-      // Try to parse timestamp from the Session ID
-      final sessionId = metadata['Session ID'] ?? path.basename(sessionPath);
-      DateTime timestamp;
-
-      try {
-        // Try to parse from the session ID (expected format: YYYYMMDD_HHMMSS)
-        timestamp = DateFormat('yyyyMMdd_HHmmss').parse(sessionId);
-      } catch (e) {
-        // Fallback: use current time
-        timestamp = DateTime.now();
+      // Check for sensor data file
+      final File sensorFile = File('$sessionPath/sensors.csv');
+      String? sensorDataFileName;
+      if (await sensorFile.exists()) {
+        sensorDataFileName = 'sensors.csv';
       }
-
-      // Parse duration - default to 0 if parsing fails
-      int durationSeconds = 0;
-      try {
-        final durationStr = metadata['Recording Duration (s)'];
-        if (durationStr != null) {
-          durationSeconds = int.parse(durationStr);
-        }
-      } catch (e) {
-        // Keep default duration
-      }
-
-      // Check for video and sensor files
-      final videoFile = File(path.join(sessionPath, 'video.mp4'));
-      final sensorFile = File(path.join(sessionPath, 'sensors.csv'));
-
-      final videoFileName = await videoFile.exists() ? 'video.mp4' : null;
-      final sensorDataFileName =
-          await sensorFile.exists() ? 'sensors.csv' : null;
 
       return {
         'sessionId': sessionId,
@@ -336,7 +395,6 @@ class DataManagementServiceImpl implements DataManagementService {
         'sensorDataFileName': sensorDataFileName,
       };
     } catch (e) {
-      // Log error
       print('Error getting session display info: $e');
       return null;
     }
@@ -368,9 +426,6 @@ class DataManagementServiceImpl implements DataManagementService {
       final files = filePaths.map((path) => XFile(path)).toList();
 
       // Share files
-      // Note: For text parameter, we need to check if this is Android or iOS
-      // On Android, text must be a String not CharSequence
-      // Use null for the text parameter to avoid issues with type casting
       await Share.shareXFiles(
         files,
         subject: 'Road Data Recording ${path.basename(sessionPath)}',
@@ -474,6 +529,91 @@ class DataManagementServiceImpl implements DataManagementService {
       // Log the error
       print('Error opening file explorer: $e');
       return false;
+    }
+  }
+
+  // Helper method to read metadata summary from file
+  Future<Map<String, String>> _readMetadataSummary(File metadataFile) async {
+    final Map<String, String> result = {};
+
+    try {
+      if (await metadataFile.exists()) {
+        final String content = await metadataFile.readAsString();
+        final List<String> lines = content.split('\n');
+
+        for (final line in lines) {
+          if (line.contains(':')) {
+            final parts = line.split(':');
+            if (parts.length >= 2) {
+              final key = parts[0].trim();
+              final value = parts.sublist(1).join(':').trim();
+              result[key] = value;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error reading metadata file: $e');
+    }
+
+    return result;
+  }
+
+  // Helper method to get session timestamp from directory name or metadata
+  Future<DateTime> _getSessionTimestamp(String sessionPath) async {
+    try {
+      final String sessionId = path.basename(sessionPath);
+
+      // Try to parse timestamp from sessionId (expected format: session_YYYYMMDD_HHMMSS)
+      if (sessionId.startsWith('session_') && sessionId.length >= 21) {
+        try {
+          // Parse date part and time part separately to avoid format issues
+          final datePart = sessionId.substring(8, 16); // YYYYMMDD
+          final timePart = sessionId.substring(17, 23); // HHMMSS
+
+          final year = int.parse(datePart.substring(0, 4));
+          final month = int.parse(datePart.substring(4, 6));
+          final day = int.parse(datePart.substring(6, 8));
+
+          final hour = int.parse(timePart.substring(0, 2));
+          final minute = int.parse(timePart.substring(2, 4));
+          final second = int.parse(timePart.substring(4, 6));
+
+          return DateTime(year, month, day, hour, minute, second);
+        } catch (e) {
+          print('Error parsing datetime from sessionId: $e');
+        }
+      }
+
+      // Try to read timestamp from metadata.txt
+      final File metadataFile = File('$sessionPath/metadata.txt');
+      if (await metadataFile.exists()) {
+        try {
+          final metadata = await _readMetadataSummary(metadataFile);
+          if (metadata.containsKey('timestamp')) {
+            return DateTime.parse(metadata['timestamp']!);
+          }
+          if (metadata.containsKey('recording_time')) {
+            return DateTime.parse(metadata['recording_time']!);
+          }
+        } catch (e) {
+          print('Error parsing timestamp from metadata: $e');
+        }
+      }
+
+      // Fallback: use directory stats
+      try {
+        final dirStat = await Directory(sessionPath).stat();
+        return dirStat.changed;
+      } catch (e) {
+        print('Error getting directory stats: $e');
+      }
+
+      // Last resort: current time
+      return DateTime.now();
+    } catch (e) {
+      print('Error getting session timestamp: $e');
+      return DateTime.now();
     }
   }
 }

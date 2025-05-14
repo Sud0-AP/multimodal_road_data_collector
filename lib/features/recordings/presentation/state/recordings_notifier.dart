@@ -4,6 +4,7 @@ import 'package:multimodal_road_data_collector/core/services/data_management_ser
 import 'package:multimodal_road_data_collector/features/recordings/domain/models/recording_display_info.dart';
 import 'recordings_state.dart';
 import 'package:path/path.dart' as path;
+import 'dart:io';
 
 /// Notifier for managing recordings data and UI state
 class RecordingsNotifier extends StateNotifier<RecordingsState> {
@@ -51,7 +52,7 @@ class RecordingsNotifier extends StateNotifier<RecordingsState> {
           );
 
           if (infoMap != null) {
-            print('Session info retrieved: $infoMap');
+            // DataManagementServiceImpl now handles duration estimation
             final recordingInfo = RecordingDisplayInfo(
               sessionId: infoMap['sessionId'] as String,
               sessionPath: infoMap['sessionPath'] as String,

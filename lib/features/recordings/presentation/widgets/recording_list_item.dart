@@ -116,10 +116,27 @@ class RecordingListItem extends StatelessWidget {
     );
   }
 
-  // Format duration in seconds to a readable string (MM:SS)
+  /// Format duration in seconds to a readable string
+  ///
+  /// Handles various duration lengths:
+  /// - If less than 1 hour, displays as "MM:SS"
+  /// - If 1 hour or more, displays as "HH:MM:SS"
+  /// - Properly formats with leading zeros for seconds and minutes
   String _formatDuration(int seconds) {
-    final minutes = seconds ~/ 60;
+    if (seconds <= 0) {
+      return '0:00'; // Handle zero or negative values
+    }
+
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
     final remainingSeconds = seconds % 60;
-    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
+
+    if (hours > 0) {
+      // Format with hours (HH:MM:SS)
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    } else {
+      // Format without hours (MM:SS)
+      return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
+    }
   }
 }

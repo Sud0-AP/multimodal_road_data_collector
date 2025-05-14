@@ -16,11 +16,36 @@ final deviceInfoServiceProvider = Provider<DeviceInfoService>((ref) {
   return DeviceInfoServiceImpl.create();
 });
 
+/// Fallback implementation of AppInfoService when package info is not available yet
+class FallbackAppInfoService implements AppInfoService {
+  @override
+  Future<String> getAppName() async => 'Road Data Collector';
+
+  @override
+  Future<String> getAppVersion() async => 'Unknown';
+
+  @override
+  Future<String> getBuildNumber() async => 'Unknown';
+
+  @override
+  Future<String> getPackageName() async =>
+      'com.example.multimodal_road_data_collector';
+
+  @override
+  Future<Map<String, dynamic>> getAppInfo() async => {
+    'appName': 'Road Data Collector',
+    'packageName': 'com.example.multimodal_road_data_collector',
+    'version': 'Unknown',
+    'buildNumber': 'Unknown',
+  };
+}
+
 /// Provider for AppInfoService
 final appInfoServiceProvider = Provider<AppInfoService>((ref) {
   final packageInfo = ref.watch(_packageInfoProvider).value;
   if (packageInfo == null) {
-    throw Exception('Package info not available');
+    // Return fallback implementation instead of throwing an exception
+    return FallbackAppInfoService();
   }
   return AppInfoServiceImpl(packageInfo);
 });

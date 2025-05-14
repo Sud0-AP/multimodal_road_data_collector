@@ -15,6 +15,9 @@ class CameraServiceImpl implements CameraService {
   /// Index of the current camera in the cameras list
   int _cameraIndex = 0;
 
+  /// Current device orientation
+  DeviceOrientation _currentOrientation = DeviceOrientation.portraitUp;
+
   @override
   Future<void> initialize() async {
     try {
@@ -38,11 +41,81 @@ class CameraServiceImpl implements CameraService {
       // Set the camera index to the back camera
       _cameraIndex = _cameras!.indexOf(backCamera);
 
+      // Set up orientation detection
+      await _setupOrientationDetection();
+
       // Initialize with the back camera
       await _initializeCameraController();
     } on CameraException catch (e) {
       // Handle camera initialization errors
       _handleCameraError(e);
+    }
+  }
+
+  /// Set up device orientation detection
+  Future<void> _setupOrientationDetection() async {
+    // Enable all orientations
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    // Get the current device orientation
+    _updateCurrentOrientation();
+
+    // Listen for orientation changes
+    WidgetsBinding.instance.addObserver(
+      _OrientationObserver(
+        onOrientationChange: (DeviceOrientation orientation) {
+          final previousOrientation = _currentOrientation;
+          _currentOrientation = orientation;
+          debugPrint('📱 ORIENTATION: Changed to $_currentOrientation');
+
+          // If orientation has actually changed, adjust the camera settings
+          if (previousOrientation != _currentOrientation) {
+            _handleOrientationChange();
+          }
+        },
+      ),
+    );
+  }
+
+  /// Update the current orientation based on system metrics
+  void _updateCurrentOrientation() {
+    // Get orientation from MediaQuery would be better but we don't have BuildContext here
+    // Use system metrics as a fallback
+    final size = WidgetsBinding.instance.window.physicalSize;
+    final orientation =
+        size.width > size.height
+            ? DeviceOrientation.landscapeLeft
+            : DeviceOrientation.portraitUp;
+
+    _currentOrientation = orientation;
+    debugPrint('📱 ORIENTATION: Updated to $_currentOrientation');
+  }
+
+  /// Handle orientation changes by updating the camera
+  Future<void> _handleOrientationChange() async {
+    if (!isInitialized) return;
+
+    try {
+      // Set the capture orientation to match the new device orientation
+      await _setRecordingOrientation();
+
+      // Force a camera settings update to reflect the new orientation
+      debugPrint(
+        '📱 CAMERA: Adjusting preview for orientation change to $_currentOrientation',
+      );
+
+      // This will trigger any listeners to rebuild the camera preview
+      if (_controller != null) {
+        // Apply auto-focus to trigger a controller refresh
+        await _controller!.setFocusMode(FocusMode.auto);
+      }
+    } catch (e) {
+      debugPrint('⚠️ CAMERA: Failed to adjust for orientation change: $e');
     }
   }
 
@@ -78,8 +151,33 @@ class CameraServiceImpl implements CameraService {
       debugPrint('Warning: Could not set advanced camera settings: $e');
     }
 
-    // Lock orientation to portrait mode
-    await _controller!.lockCaptureOrientation(DeviceOrientation.portraitUp);
+    // Do NOT lock orientation here - we want the camera to adapt to the device orientation
+    // Instead, handle orientation when starting recording
+  }
+
+  /// Set the recording orientation based on the current device orientation
+  Future<void> _setRecordingOrientation() async {
+    DeviceOrientation recordingOrientation;
+
+    // Determine which orientation to use for recording
+    if (_currentOrientation == DeviceOrientation.landscapeLeft ||
+        _currentOrientation == DeviceOrientation.landscapeRight) {
+      // Use the current landscape orientation
+      recordingOrientation = _currentOrientation;
+    } else {
+      // Default to portrait if not in landscape
+      recordingOrientation = DeviceOrientation.portraitUp;
+    }
+
+    // Set the capture orientation
+    try {
+      await _controller!.lockCaptureOrientation(recordingOrientation);
+      debugPrint(
+        '📱 CAMERA: Set recording orientation to $recordingOrientation',
+      );
+    } catch (e) {
+      debugPrint('⚠️ CAMERA: Failed to set recording orientation: $e');
+    }
   }
 
   @override
@@ -112,8 +210,14 @@ class CameraServiceImpl implements CameraService {
     }
 
     try {
+      // Update orientation detection before recording
+      _updateCurrentOrientation();
+
+      // Set the recording orientation based on current device orientation
+      await _setRecordingOrientation();
+
       debugPrint(
-        '🎥 CAMERA: Starting video recording at ${DateTime.now().toIso8601String()}',
+        '🎥 CAMERA: Starting video recording at ${DateTime.now().toIso8601String()} in orientation: $_currentOrientation',
       );
       await _controller!.startVideoRecording();
       debugPrint('✅ CAMERA: Video recording started successfully');
@@ -164,6 +268,19 @@ class CameraServiceImpl implements CameraService {
         );
       }
 
+      // Unlock orientation after recording
+      try {
+        // We don't actually unlock - just recompute the current orientation
+        _updateCurrentOrientation();
+
+        // Set the current orientation to match the device
+        await _setRecordingOrientation();
+      } catch (e) {
+        debugPrint(
+          '⚠️ CAMERA: Failed to reset orientation after recording: $e',
+        );
+      }
+
       return videoFile.path;
     } on CameraException catch (e) {
       debugPrint(
@@ -189,8 +306,43 @@ class CameraServiceImpl implements CameraService {
       );
     }
 
-    // Return the camera preview
-    return CameraPreview(_controller!);
+    // Return the camera preview with a transform to handle orientation
+    // Using a key based on orientation to force recreation when orientation changes
+    return _buildCameraPreview(key: ValueKey(_currentOrientation));
+  }
+
+  /// Build camera preview with appropriate orientation handling
+  Widget _buildCameraPreview({Key? key}) {
+    // Determine if we are in landscape mode
+    final isLandscape =
+        _currentOrientation == DeviceOrientation.landscapeLeft ||
+        _currentOrientation == DeviceOrientation.landscapeRight;
+
+    debugPrint(
+      '📱 CAMERA: Building preview for orientation: $_currentOrientation (isLandscape: $isLandscape)',
+    );
+
+    // Use SizedBox.expand to fill the entire available space
+    return SizedBox.expand(
+      key: key,
+      child: FittedBox(
+        // Fill the space while maintaining aspect ratio
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: _controller!.value.previewSize!.height,
+          height: _controller!.value.previewSize!.width,
+          child: Center(
+            child: AspectRatio(
+              aspectRatio:
+                  isLandscape
+                      ? _controller!.value.aspectRatio
+                      : 1 / _controller!.value.aspectRatio,
+              child: CameraPreview(_controller!),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -203,6 +355,12 @@ class CameraServiceImpl implements CameraService {
     }
 
     try {
+      // Update orientation detection before taking picture
+      _updateCurrentOrientation();
+
+      // Set the capture orientation based on current device orientation
+      await _setRecordingOrientation();
+
       final XFile image = await _controller!.takePicture();
       return image.path;
     } on CameraException catch (e) {
@@ -255,5 +413,27 @@ class CameraServiceImpl implements CameraService {
   @visibleForTesting
   CameraController? testGetController() {
     return _controller;
+  }
+}
+
+/// Observer for device orientation changes
+class _OrientationObserver with WidgetsBindingObserver {
+  /// Callback for orientation changes
+  final Function(DeviceOrientation) onOrientationChange;
+
+  /// Constructor
+  _OrientationObserver({required this.onOrientationChange});
+
+  @override
+  void didChangeMetrics() {
+    // Get current orientation
+    final size = WidgetsBinding.instance.window.physicalSize;
+    final orientation =
+        size.width > size.height
+            ? DeviceOrientation.landscapeLeft
+            : DeviceOrientation.portraitUp;
+
+    // Notify the callback
+    onOrientationChange(orientation);
   }
 }

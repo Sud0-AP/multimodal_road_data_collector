@@ -56,6 +56,12 @@ class RecordingState {
   /// Session-specific bump threshold
   final double? bumpThreshold;
 
+  /// Timestamp when the calibration was performed
+  final int? calibrationTimestamp;
+
+  /// Number of samples used during calibration
+  final int? calibrationSamplesCount;
+
   /// Constructor
   const RecordingState({
     this.status = RecordingStatus.initial,
@@ -67,6 +73,8 @@ class RecordingState {
     this.sessionAccelOffsetZ,
     this.gyroZDrift,
     this.bumpThreshold,
+    this.calibrationTimestamp,
+    this.calibrationSamplesCount,
   });
 
   /// Create a copy of this state with the given fields replaced
@@ -80,6 +88,8 @@ class RecordingState {
     double? sessionAccelOffsetZ,
     double? gyroZDrift,
     double? bumpThreshold,
+    int? calibrationTimestamp,
+    int? calibrationSamplesCount,
   }) {
     return RecordingState(
       status: status ?? this.status,
@@ -94,6 +104,9 @@ class RecordingState {
       sessionAccelOffsetZ: sessionAccelOffsetZ ?? this.sessionAccelOffsetZ,
       gyroZDrift: gyroZDrift ?? this.gyroZDrift,
       bumpThreshold: bumpThreshold ?? this.bumpThreshold,
+      calibrationTimestamp: calibrationTimestamp ?? this.calibrationTimestamp,
+      calibrationSamplesCount:
+          calibrationSamplesCount ?? this.calibrationSamplesCount,
     );
   }
 }
@@ -127,6 +140,8 @@ class RecordingStateNotifier extends StateNotifier<RecordingState> {
     required double sessionAccelOffsetZ,
     required double gyroZDrift,
     required double bumpThreshold,
+    int? calibrationTimestamp,
+    int? calibrationSamplesCount,
   }) {
     state = state.copyWith(
       status: RecordingStatus.recording,
@@ -135,6 +150,8 @@ class RecordingStateNotifier extends StateNotifier<RecordingState> {
       gyroZDrift: gyroZDrift,
       bumpThreshold: bumpThreshold,
       recordingDurationSeconds: 0,
+      calibrationTimestamp: calibrationTimestamp,
+      calibrationSamplesCount: calibrationSamplesCount,
     );
   }
 

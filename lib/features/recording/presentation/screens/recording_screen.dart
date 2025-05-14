@@ -11,6 +11,7 @@ import '../../../../core/services/file_storage_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../features/calibration/presentation/state/calibration_provider.dart';
+import '../../../../features/calibration/data/repositories/providers.dart';
 import '../../domain/managers/recording_session_manager.dart';
 import '../../domain/models/corrected_sensor_data_point.dart';
 import '../providers/recording_lifecycle_provider.dart';
@@ -545,20 +546,82 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       // Generate metadata.txt file
       final recState = ref.read(recordingStateProvider);
 
+      // Load the actual calibration data from repository
+      final calibrationRepository = ref.read(calibrationRepositoryProvider);
+      final initialCalibrationData =
+          await calibrationRepository.loadInitialCalibrationData();
+
+      // Get actual sampling rate using multiple methods for reliability
+      double actualSamplingRate;
+
+      // Primary method: Use the recording session manager's calculation
+      final calculatedRate =
+          _recordingSessionManager.calculateActualSamplingRateHz();
+
+      if (calculatedRate != null && calculatedRate > 0) {
+        // Use the calculated rate from session manager if available
+        actualSamplingRate = calculatedRate;
+        debugPrint(
+          '📊 SENSOR RATE: Using calculated rate: ${actualSamplingRate.toStringAsFixed(2)} Hz',
+        );
+      } else {
+        // Fallback method 1: Calculate based on the number of data points and recording duration
+        try {
+          final csvPath = await _fileStorageService.getSensorDataCsvPath(
+            updatedSessionDir,
+          );
+          final csvFile = File(csvPath);
+          if (await csvFile.exists()) {
+            final csvSize = await csvFile.length();
+            final approximateDataPoints =
+                csvSize ~/ 100; // Rough estimate based on file size
+
+            // Calculate using the recording duration and approximate data points
+            actualSamplingRate =
+                approximateDataPoints / recState.recordingDurationSeconds;
+            debugPrint(
+              '📊 SENSOR RATE: Calculated from CSV size: ${actualSamplingRate.toStringAsFixed(2)} Hz',
+            );
+          } else {
+            // Fallback method 2: Use a more reasonable default based on device capabilities
+            actualSamplingRate =
+                100.0; // More realistic default than 50Hz for modern devices
+            debugPrint(
+              '📊 SENSOR RATE: Using default rate (100 Hz) as CSV file not found',
+            );
+          }
+        } catch (e) {
+          // Final fallback: Use a reasonable default
+          actualSamplingRate = 100.0;
+          debugPrint(
+            '📊 SENSOR RATE: Using default rate (100 Hz) due to error: $e',
+          );
+        }
+      }
+
       // Create recording completion data with all necessary information
       final Map<String, dynamic> recordingData = {
         'sessionId': path.basename(updatedSessionDir),
         'durationSeconds': recState.recordingDurationSeconds,
-        'orientationMode': 'portrait', // Default orientation
-        'accelOffsetX': 0.0,
-        'accelOffsetY': 0.0,
-        'accelOffsetZ': 0.0,
-        'gyroOffsetX': 0.0,
-        'gyroOffsetY': 0.0,
-        'gyroOffsetZ': 0.0,
+        'orientationMode':
+            initialCalibrationData?.deviceOrientation.toString() ?? 'portrait',
+        'accelOffsetX': initialCalibrationData?.accelerometerXOffset ?? 0.0,
+        'accelOffsetY': initialCalibrationData?.accelerometerYOffset ?? 0.0,
+        'accelOffsetZ': initialCalibrationData?.accelerometerZOffset ?? 0.0,
+        'gyroOffsetX': initialCalibrationData?.gyroscopeXOffset ?? 0.0,
+        'gyroOffsetY': initialCalibrationData?.gyroscopeYOffset ?? 0.0,
+        'gyroOffsetZ': initialCalibrationData?.gyroscopeZOffset ?? 0.0,
         'sessionAdjustedAccelZ': recState.sessionAccelOffsetZ ?? 0.0,
         'bumpThreshold': recState.bumpThreshold ?? 0.0,
         'gyroZDrift': recState.gyroZDrift ?? 0.0,
+        'calibrationTimestamp':
+            initialCalibrationData?.calibrationTimestamp ??
+            recState.calibrationTimestamp ??
+            DateTime.now().millisecondsSinceEpoch,
+        'calibrationSamplesCount':
+            initialCalibrationData?.calibrationSamplesCount ??
+            recState.calibrationSamplesCount ??
+            0,
         'videoStartNtp': DateTime.now().subtract(
           Duration(seconds: recState.recordingDurationSeconds),
         ),
@@ -569,21 +632,62 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         'sensorEndNtp': DateTime.now(),
         'sensorStartMonotonicMs': 0,
         'sensorEndMonotonicMs': recState.recordingDurationSeconds * 1000,
-        'actualSamplingRateHz': 50.0, // Default sampling rate
+        'actualSamplingRateHz': actualSamplingRate,
         'videoResolution': '1920x1080', // Default resolution
         'warnings': <String>[], // Empty list of strings for warnings
       };
 
       // Add the import for the recordings notifier provider
-      // Call generateAndSaveMetadata on the DataManagementService directly
-      final dataManagementService = ref.read(dataManagementServiceProvider);
-      final metadataSuccess = await dataManagementService
-          .generateAndSaveMetadata(updatedSessionDir, recordingData);
+      try {
+        // Call generateAndSaveMetadata on the DataManagementService directly
+        final dataManagementService = ref.read(dataManagementServiceProvider);
+        final metadataSuccess = await dataManagementService
+            .generateAndSaveMetadata(updatedSessionDir, recordingData);
 
-      if (metadataSuccess) {
-        debugPrint('✅ METADATA: Generated and saved successfully');
-      } else {
-        debugPrint('❌ METADATA: Failed to generate or save metadata');
+        if (metadataSuccess) {
+          debugPrint('✅ METADATA: Generated and saved successfully');
+        } else {
+          // If the service-level save fails, try a direct file write as a fallback
+          debugPrint(
+            '⚠️ METADATA: Primary method failed, trying fallback method',
+          );
+
+          // Create basic metadata content
+          final basicMetadata = StringBuffer();
+          basicMetadata.writeln('--- Recording Session Metadata ---');
+          basicMetadata.writeln('Session ID: ${recordingData['sessionId']}');
+          basicMetadata.writeln(
+            'Recording Duration (s): ${recordingData['durationSeconds']}',
+          );
+          basicMetadata.writeln(
+            'Actual Sampling Rate (Hz): ${recordingData['actualSamplingRateHz']}',
+          );
+          basicMetadata.writeln(
+            'Calibration Timestamp: ${DateTime.fromMillisecondsSinceEpoch(recordingData['calibrationTimestamp'] as int).toIso8601String()}',
+          );
+          basicMetadata.writeln(
+            'Calibration Samples Count: ${recordingData['calibrationSamplesCount']}',
+          );
+
+          // Try to write directly
+          final fileStorageService = ref.read(fileStorageServiceProvider);
+          final fallbackSuccess = await fileStorageService.writeMetadata(
+            basicMetadata.toString(),
+            updatedSessionDir,
+          );
+
+          if (fallbackSuccess) {
+            debugPrint('✅ METADATA: Fallback method successful');
+          } else {
+            debugPrint('❌ METADATA: All metadata generation methods failed');
+            // Even if metadata fails, we don't throw an exception here
+            // The recording is still valid and usable without metadata
+          }
+        }
+      } catch (e) {
+        // Log the error but continue - metadata is helpful but not critical
+        debugPrint('❌ METADATA ERROR: $e');
+        debugPrint('⚠️ Continuing without metadata - recording is still saved');
       }
     } catch (e) {
       debugPrint('❌ ERROR stopping recording: $e');

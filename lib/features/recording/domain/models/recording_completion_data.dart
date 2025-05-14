@@ -61,6 +61,12 @@ class RecordingCompletionData {
   /// Gyroscope drift in degrees measured during pre-recording calibration
   final double gyroZDrift;
 
+  /// Timestamp when the calibration was performed (in milliseconds since epoch)
+  final int? calibrationTimestamp;
+
+  /// Number of samples used during calibration
+  final int calibrationSamplesCount;
+
   /// Any significant warnings or issues encountered during recording
   final List<String> warnings;
 
@@ -78,6 +84,8 @@ class RecordingCompletionData {
     required this.sessionAdjustedAccelZ,
     required this.bumpThreshold,
     required this.gyroZDrift,
+    this.calibrationTimestamp,
+    this.calibrationSamplesCount = 0,
     this.videoStartNtp,
     this.videoEndNtp,
     this.sensorStartNtp,
@@ -111,6 +119,8 @@ class RecordingCompletionData {
     double? sessionAdjustedAccelZ,
     double? bumpThreshold,
     double? gyroZDrift,
+    int? calibrationTimestamp,
+    int? calibrationSamplesCount,
     List<String>? warnings,
   }) {
     return RecordingCompletionData(
@@ -136,6 +146,9 @@ class RecordingCompletionData {
           sessionAdjustedAccelZ ?? this.sessionAdjustedAccelZ,
       bumpThreshold: bumpThreshold ?? this.bumpThreshold,
       gyroZDrift: gyroZDrift ?? this.gyroZDrift,
+      calibrationTimestamp: calibrationTimestamp ?? this.calibrationTimestamp,
+      calibrationSamplesCount:
+          calibrationSamplesCount ?? this.calibrationSamplesCount,
       warnings: warnings ?? this.warnings,
     );
   }
@@ -163,6 +176,8 @@ class RecordingCompletionData {
       'sessionAdjustedAccelZ': sessionAdjustedAccelZ,
       'bumpThreshold': bumpThreshold,
       'gyroZDrift': gyroZDrift,
+      'calibrationTimestamp': calibrationTimestamp,
+      'calibrationSamplesCount': calibrationSamplesCount,
       'warnings': warnings,
     };
   }

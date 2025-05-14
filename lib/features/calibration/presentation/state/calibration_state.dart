@@ -652,6 +652,7 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
               gyroscopeYOffset: offsetGyroY,
               gyroscopeZOffset: offsetGyroZ,
               calibrationTimestamp: DateTime.now().millisecondsSinceEpoch,
+              calibrationSamplesCount: sampleCount,
             );
 
             // Update UI with final status
@@ -744,6 +745,7 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
             gyroscopeYOffset: sumGyroY / sampleCount,
             gyroscopeZOffset: sumGyroZ / sampleCount,
             calibrationTimestamp: DateTime.now().millisecondsSinceEpoch,
+            calibrationSamplesCount: sampleCount,
           );
 
           completer.complete(_CalibrationResult.success(calibrationData));

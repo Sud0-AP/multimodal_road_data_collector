@@ -44,6 +44,9 @@ class InitialCalibrationData {
   /// Timestamp when the calibration was performed
   final int calibrationTimestamp;
 
+  /// Number of samples used during calibration
+  final int calibrationSamplesCount;
+
   /// Creates an instance of [InitialCalibrationData]
   InitialCalibrationData({
     required this.deviceOrientation,
@@ -54,6 +57,7 @@ class InitialCalibrationData {
     required this.gyroscopeYOffset,
     required this.gyroscopeZOffset,
     required this.calibrationTimestamp,
+    this.calibrationSamplesCount = 0,
   });
 
   /// Default constructor with zero values for offsets
@@ -67,6 +71,7 @@ class InitialCalibrationData {
       gyroscopeYOffset: 0.0,
       gyroscopeZOffset: 0.0,
       calibrationTimestamp: DateTime.now().millisecondsSinceEpoch,
+      calibrationSamplesCount: 0,
     );
   }
 
@@ -80,6 +85,7 @@ class InitialCalibrationData {
     double? gyroscopeYOffset,
     double? gyroscopeZOffset,
     int? calibrationTimestamp,
+    int? calibrationSamplesCount,
   }) {
     return InitialCalibrationData(
       deviceOrientation: deviceOrientation ?? this.deviceOrientation,
@@ -90,6 +96,8 @@ class InitialCalibrationData {
       gyroscopeYOffset: gyroscopeYOffset ?? this.gyroscopeYOffset,
       gyroscopeZOffset: gyroscopeZOffset ?? this.gyroscopeZOffset,
       calibrationTimestamp: calibrationTimestamp ?? this.calibrationTimestamp,
+      calibrationSamplesCount:
+          calibrationSamplesCount ?? this.calibrationSamplesCount,
     );
   }
 
@@ -104,6 +112,7 @@ class InitialCalibrationData {
       'gyroscopeYOffset': gyroscopeYOffset,
       'gyroscopeZOffset': gyroscopeZOffset,
       'calibrationTimestamp': calibrationTimestamp,
+      'calibrationSamplesCount': calibrationSamplesCount,
     };
   }
 
@@ -118,6 +127,7 @@ class InitialCalibrationData {
       gyroscopeYOffset: json['gyroscopeYOffset'],
       gyroscopeZOffset: json['gyroscopeZOffset'],
       calibrationTimestamp: json['calibrationTimestamp'],
+      calibrationSamplesCount: json['calibrationSamplesCount'] ?? 0,
     );
   }
 
@@ -156,6 +166,7 @@ class InitialCalibrationData {
         'gyroscopeXOffset: $gyroscopeXOffset, '
         'gyroscopeYOffset: $gyroscopeYOffset, '
         'gyroscopeZOffset: $gyroscopeZOffset, '
-        'calibrationTimestamp: $calibrationTimestamp)';
+        'calibrationTimestamp: $calibrationTimestamp, '
+        'calibrationSamplesCount: $calibrationSamplesCount)';
   }
 }

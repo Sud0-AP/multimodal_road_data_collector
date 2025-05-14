@@ -345,6 +345,7 @@ class _InitialCalibrationScreenState
     formattedString += '  X: ${data.gyroscopeXOffset.toStringAsFixed(4)}\n';
     formattedString += '  Y: ${data.gyroscopeYOffset.toStringAsFixed(4)}\n';
     formattedString += '  Z: ${data.gyroscopeZOffset.toStringAsFixed(4)}\n\n';
+    formattedString += 'Samples Collected: ${data.calibrationSamplesCount}\n\n';
     formattedString +=
         'Timestamp: ${DateTime.fromMillisecondsSinceEpoch(data.calibrationTimestamp).toString()}';
 

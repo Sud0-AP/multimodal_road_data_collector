@@ -11,6 +11,7 @@ import '../features/calibration/presentation/state/calibration_provider.dart';
 import '../features/recording/presentation/screens/recording_screen.dart';
 import '../features/recordings/presentation/screens/recordings_list_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
+import '../features/home/presentation/screens/home_screen.dart';
 
 /// Routes names used throughout the app
 class AppRoutes {
@@ -54,66 +55,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.homePath,
         name: AppRoutes.home,
-        builder: (context, state) {
-          // Get the calibration status to conditionally show the recording button
-          final calibrationNeeded = ref.watch(calibrationNeededProvider);
-          final calibrationCompleted = ref.watch(calibrationCompletedProvider);
-          final showRecordButton = !calibrationNeeded || calibrationCompleted;
-
-          // Placeholder home screen with a button to navigate to calibration screen
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Road Data Collector'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: () => context.pushNamed(AppRoutes.settings),
-                  tooltip: 'Settings',
-                ),
-              ],
-            ),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'Home Screen - Coming Soon',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => context.pushNamed(AppRoutes.calibration),
-                    child: const Text('Calibrate Sensors'),
-                  ),
-                  const SizedBox(height: 16),
-                  // Only show the Record Road Data button if calibration is completed
-                  if (showRecordButton)
-                    ElevatedButton(
-                      onPressed: () => context.pushNamed(AppRoutes.recording),
-                      child: const Text('Record Road Data'),
-                    )
-                  else
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20),
-                      child: Text(
-                        'Calibration required before recording',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => context.pushNamed(AppRoutes.recordings),
-                    child: const Text('Previous Recordings'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+        builder: (context, state) => const HomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.onboardingPath,

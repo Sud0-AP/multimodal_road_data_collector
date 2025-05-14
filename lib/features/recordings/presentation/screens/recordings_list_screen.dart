@@ -240,8 +240,13 @@ class _RecordingsListScreenState extends ConsumerState<RecordingsListScreen>
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemBuilder: (context, index) {
           final recording = state.recordings[index];
+          // Calculate recording number (total count - index) for reverse numbering
+          final recordingNumber = state.recordings.length - index;
+
           return RecordingListItem(
             recording: recording,
+            // Pass the recordingNumber to show "Recording #N" format
+            recordingNumber: recordingNumber,
             onDelete:
                 state.isDeletingRecording
                     ? null

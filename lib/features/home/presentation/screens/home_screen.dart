@@ -8,13 +8,35 @@ import '../../../../app/router.dart';
 import '../../../../constants/app_constants.dart';
 import '../../../calibration/presentation/state/calibration_provider.dart';
 import '../../../recordings/domain/models/recording_display_info.dart';
+import '../../../recordings/presentation/providers/recordings_providers.dart';
+import '../../../recordings/presentation/state/recordings_state.dart';
+import '../../../recordings/presentation/widgets/recording_list_item.dart';
 
 /// A redesigned home screen with a more polished and modern UI
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Load recordings when the screen is first shown with no conditions
+    // Using a small delay to ensure widget is properly mounted
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        // Always load recordings when the home screen is opened
+        ref.read(recordingsNotifierProvider.notifier).loadRecordings();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -40,21 +62,21 @@ class HomeScreen extends ConsumerWidget {
                 'Multimodal',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 28,
+                  fontSize: 32,
                 ),
               ),
               Text(
                 'Road Data Collector',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 26,
+                  fontSize: 30,
                 ),
               ),
             ],
           ),
         ),
         centerTitle: true,
-        toolbarHeight: 80, // Increased to accommodate two lines
+        toolbarHeight: 90,
         elevation: 0,
         backgroundColor: colorScheme.surface,
         actions: [
@@ -147,7 +169,10 @@ class HomeScreen extends ConsumerWidget {
                           color: colorScheme.primary,
                         ),
                         onPressed: () {
-                          // Would implement refresh functionality here
+                          // Load recordings using the same provider used in RecordingsListScreen
+                          ref
+                              .read(recordingsNotifierProvider.notifier)
+                              .loadRecordings();
                         },
                         tooltip: 'Refresh recordings',
                       ),
@@ -162,15 +187,15 @@ class HomeScreen extends ConsumerWidget {
               Expanded(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    // Further increased height for recordings section
-                    maxHeight: MediaQuery.of(context).size.height * 0.45,
+                    // Slight adjustment to max height to prevent overlap with FAB
+                    maxHeight: MediaQuery.of(context).size.height * 0.43,
                   ),
-                  child: _buildRecordingsList(context),
+                  child: _buildRecordingsList(context, ref),
                 ),
               ),
 
               // Add spacer to push content up and leave room for FAB
-              const SizedBox(height: 80),
+              const SizedBox(height: 85),
             ],
           ),
         ),
@@ -180,8 +205,9 @@ class HomeScreen extends ConsumerWidget {
           showRecordButton
               ? Padding(
                 padding: const EdgeInsets.only(
-                  bottom: 30.0,
-                ), // Move it up a bit
+                  bottom:
+                      12.0, // ADJUST THIS VALUE: lower number = button closer to bottom of screen
+                ),
                 child: FloatingActionButton.extended(
                   onPressed: () => context.pushNamed(AppRoutes.recording),
                   label: const Text('Record Data'),
@@ -200,14 +226,48 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // Building the recordings list with dummy data for now
-  Widget _buildRecordingsList(BuildContext context) {
+  // Building the recordings list with real data from the provider
+  Widget _buildRecordingsList(BuildContext context, WidgetRef ref) {
+    final recordingsState = ref.watch(recordingsNotifierProvider);
     final theme = Theme.of(context);
 
-    // Create dummy recordings for UI demonstration
-    final dummyRecordings = _createDummyRecordings();
+    // If recordings are still loading, show loading indicator
+    if (recordingsState.status == RecordingsStatus.loading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading recordings...'),
+          ],
+        ),
+      );
+    }
 
-    if (dummyRecordings.isEmpty) {
+    // If there was an error loading recordings
+    if (recordingsState.status == RecordingsStatus.error) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 16),
+            Text(recordingsState.errorMessage ?? 'Unknown error'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                ref.read(recordingsNotifierProvider.notifier).loadRecordings();
+              },
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // If there are no recordings
+    if (recordingsState.recordings.isEmpty) {
       // Empty state
       return Center(
         child: Column(
@@ -241,9 +301,11 @@ class HomeScreen extends ConsumerWidget {
     }
 
     // Show a limited list of recordings (max 3)
-    final recordingsToShow = dummyRecordings.take(3).toList();
-    final totalRecordings = dummyRecordings.length;
+    final allRecordings = recordingsState.recordings;
+    final recordingsToShow = allRecordings.take(3).toList();
 
+    // Reverse the list display order so newest is at the top
+    // This keeps the display order (#N to #1) from newest to oldest
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -254,164 +316,131 @@ class HomeScreen extends ConsumerWidget {
             itemCount: recordingsToShow.length,
             itemBuilder: (context, index) {
               final recording = recordingsToShow[index];
-              return _buildRecordingCard(context, recording);
-            },
-          ),
-        ),
-      ],
-    );
-  }
+              // Calculate recording number (total count - index) for reverse numbering
+              final recordingNumber = allRecordings.length - index;
 
-  // Build an individual recording card
-  Widget _buildRecordingCard(
-    BuildContext context,
-    RecordingDisplayInfo recording,
-  ) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    // Format timestamp
-    final date = DateFormat('MMM dd, yyyy').format(recording.timestamp);
-    final time = DateFormat('HH:mm:ss').format(recording.timestamp);
-
-    // Format duration
-    final duration = _formatDuration(recording.durationSeconds);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior:
-          Clip.hardEdge, // Change to hardEdge to prevent any unwanted decorations
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: InkWell(
-        onTap: () {
-          // Would navigate to recording details page
-        },
-        child: Container(
-          // Wrapped in Container to ensure clean rendering
-          color: theme.cardColor, // Explicitly set background color
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                // Recording icon
-                Container(
-                  width: 45,
-                  height: 45,
-                  decoration: BoxDecoration(
-                    color: colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.videocam,
-                    color: colorScheme.onSecondaryContainer,
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Recording info with optimized text size
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recording on $date',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                        overflow:
-                            TextOverflow.ellipsis, // Prevent text overflow
+              // Use a more compact version for the home screen, but not too small
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Card(
+                  clipBehavior: Clip.antiAlias,
+                  elevation: 2,
+                  margin: EdgeInsets.zero,
+                  child: InkWell(
+                    onTap: () => context.pushNamed(AppRoutes.recordings),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
                       ),
-                      Row(
+                      child: Row(
                         children: [
-                          Flexible(
-                            child: Text(
-                              'Time: $time',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 13,
-                              ),
-                              overflow:
-                                  TextOverflow
-                                      .ellipsis, // Prevent text overflow
+                          // Recording icon
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.videocam,
+                              color: theme.colorScheme.onSecondaryContainer,
+                              size: 28,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              'Duration: $duration',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontSize: 13,
-                              ),
-                              overflow:
-                                  TextOverflow
-                                      .ellipsis, // Prevent text overflow
+                          const SizedBox(width: 14),
+
+                          // Recording info with new naming convention
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Recording #$recordingNumber',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                // Remove the Session ID line from home page
+                                Text(
+                                  'Time: ${DateFormat('MMM dd, yyyy - HH:mm').format(recording.timestamp)}',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                                Text(
+                                  'Duration: ${_formatDuration(recording.durationSeconds)}',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ],
                             ),
+                          ),
+
+                          // Actions
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Share button
+                              IconButton(
+                                icon: const Icon(Icons.share, size: 20),
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Share',
+                                onPressed:
+                                    recordingsState.isSharingRecording
+                                        ? null
+                                        : () => _shareRecording(
+                                          context,
+                                          ref,
+                                          recording,
+                                        ),
+                              ),
+
+                              if (Platform.isAndroid)
+                                IconButton(
+                                  icon: const Icon(Icons.folder_open, size: 20),
+                                  visualDensity: VisualDensity.compact,
+                                  tooltip: 'Open in folder',
+                                  onPressed:
+                                      recordingsState.isDeletingRecording
+                                          ? null
+                                          : () => _viewInFolder(
+                                            context,
+                                            ref,
+                                            recording,
+                                          ),
+                                ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 20,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Delete',
+                                color: Colors.red,
+                                onPressed:
+                                    recordingsState.isDeletingRecording
+                                        ? null
+                                        : () => _deleteRecording(
+                                          context,
+                                          ref,
+                                          recording,
+                                        ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-
-                // Action buttons with adjusted sizing
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Open in folder button (only show on Android)
-                    if (Platform.isAndroid)
-                      Material(
-                        type: MaterialType.transparency,
-                        child: IconButton(
-                          icon: const Icon(Icons.folder_open),
-                          onPressed: () {
-                            // Would implement open in folder functionality
-                          },
-                          iconSize: 20,
-                          tooltip: 'Open in folder',
-                          padding: const EdgeInsets.all(4),
-                          constraints: const BoxConstraints(),
-                        ),
-                      ),
-
-                    // Share button
-                    Material(
-                      type: MaterialType.transparency,
-                      child: IconButton(
-                        icon: const Icon(Icons.share),
-                        onPressed: () {
-                          // Would implement share functionality
-                        },
-                        iconSize: 20,
-                        tooltip: 'Share recording',
-                        padding: const EdgeInsets.all(4),
-                        constraints: const BoxConstraints(),
-                      ),
-                    ),
-
-                    // Delete button
-                    Material(
-                      type: MaterialType.transparency,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () {
-                          // Would implement delete functionality
-                        },
-                        color: Colors.red,
-                        iconSize: 20,
-                        tooltip: 'Delete recording',
-                        padding: const EdgeInsets.all(4),
-                        constraints: const BoxConstraints(),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
-      ),
+
+        // Removed "View all N recordings" button as requested
+      ],
     );
   }
 
@@ -434,54 +463,103 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
-  // Create dummy recordings for UI demonstration
-  List<RecordingDisplayInfo> _createDummyRecordings() {
-    // Comment/uncomment the return [] line to toggle between empty state and dummy recordings
-    // return [];
+  // Handle deleting a recording
+  Future<void> _deleteRecording(
+    BuildContext context,
+    WidgetRef ref,
+    RecordingDisplayInfo recording,
+  ) async {
+    // Ask for confirmation before deleting
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Recording'),
+            content: Text(
+              'Are you sure you want to delete this recording from '
+              '${DateFormat('MMM dd, yyyy - HH:mm').format(recording.timestamp)}? '
+              'This cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
 
-    final now = DateTime.now();
-    return [
-      RecordingDisplayInfo(
-        sessionId: 'session_1',
-        sessionPath: '/dummy/path/1',
-        timestamp: now.subtract(const Duration(hours: 2)),
-        durationSeconds: 185,
-        videoFileName: 'video.mp4',
-        sensorDataFileName: 'sensors.csv',
-      ),
-      RecordingDisplayInfo(
-        sessionId: 'session_2',
-        sessionPath: '/dummy/path/2',
-        timestamp: now.subtract(const Duration(days: 1, hours: 5)),
-        durationSeconds: 310,
-        videoFileName: 'video.mp4',
-        sensorDataFileName: 'sensors.csv',
-      ),
-      RecordingDisplayInfo(
-        sessionId: 'session_3',
-        sessionPath: '/dummy/path/3',
-        timestamp: now.subtract(const Duration(days: 3)),
-        durationSeconds: 478,
-        videoFileName: 'video.mp4',
-        sensorDataFileName: 'sensors.csv',
-      ),
-      RecordingDisplayInfo(
-        sessionId: 'session_4',
-        sessionPath: '/dummy/path/4',
-        timestamp: now.subtract(const Duration(days: 5, hours: 12)),
-        durationSeconds: 7200, // 2 hours
-        videoFileName: 'video.mp4',
-        sensorDataFileName: 'sensors.csv',
-      ),
-      RecordingDisplayInfo(
-        sessionId: 'session_5',
-        sessionPath: '/dummy/path/5',
-        timestamp: now.subtract(const Duration(days: 7)),
-        durationSeconds: 540,
-        videoFileName: 'video.mp4',
-        sensorDataFileName: 'sensors.csv',
-      ),
-    ];
+    // If user confirmed deletion
+    if (confirmed == true) {
+      final success = await ref
+          .read(recordingsNotifierProvider.notifier)
+          .deleteRecording(recording.sessionPath);
+
+      if (context.mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recording deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to delete recording'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  // Handle sharing a recording
+  Future<void> _shareRecording(
+    BuildContext context,
+    WidgetRef ref,
+    RecordingDisplayInfo recording,
+  ) async {
+    final success = await ref
+        .read(recordingsNotifierProvider.notifier)
+        .shareRecording(recording.sessionPath);
+
+    if (context.mounted) {
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to share recording'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Handle viewing a recording in the file explorer
+  Future<void> _viewInFolder(
+    BuildContext context,
+    WidgetRef ref,
+    RecordingDisplayInfo recording,
+  ) async {
+    final success = await ref
+        .read(recordingsNotifierProvider.notifier)
+        .openSessionInFileExplorer(recording.sessionPath);
+
+    if (context.mounted && !success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open folder in file explorer'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   Widget _buildFeatureCard(

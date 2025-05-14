@@ -23,6 +23,9 @@ import '../widgets/pre_recording_calibration_overlay.dart';
 import '../widgets/annotation_prompt_overlay.dart';
 import '../../../recordings/presentation/providers/recordings_providers.dart';
 
+// Enum to define the position of buttons for different layout adjustments
+enum ButtonPosition { left, center, right }
+
 /// Recording screen with camera preview and recording controls
 class RecordingScreen extends ConsumerStatefulWidget {
   /// Constructor
@@ -705,17 +708,28 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     // Watch the recording lifecycle state to ensure the UI stays in sync
     final isRecording = ref.watch(recordingLifecycleProvider);
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       // Using a transparent AppBar to get full screen camera view
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Record Road Data'),
-        backgroundColor: Colors.black.withOpacity(0.5),
+        title: const Text(''), // Removed title text
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: _buildBody(
         recordingState,
         calibrationNeeded && !calibrationCompleted,
+        isLandscape,
+        colorScheme,
       ),
     );
   }
@@ -726,35 +740,62 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildBody(RecordingState state, bool calibrationNeeded) {
+  Widget _buildBody(
+    RecordingState state,
+    bool calibrationNeeded,
+    bool isLandscape,
+    ColorScheme colorScheme,
+  ) {
     switch (state.status) {
       case RecordingStatus.initial:
       case RecordingStatus.initializing:
-        return const Center(
+        return Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Initializing camera...'),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text('Initializing camera...'),
+              const SizedBox(height: 8),
+              Text(
+                'Please wait',
+                style: TextStyle(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
         );
 
       case RecordingStatus.error:
         return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 16),
-              Text(state.errorMessage ?? 'An error occurred'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _initializeServices,
-                child: const Text('Retry'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  state.errorMessage ?? 'An error occurred',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: colorScheme.error),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _initializeServices,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
 
@@ -780,7 +821,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                       ),
             ),
 
-            // Recording duration display when recording
+            // Recording duration display and indicators
             if (state.status == RecordingStatus.recording)
               Positioned(
                 top: kToolbarHeight + MediaQuery.of(context).padding.top + 16,
@@ -789,20 +830,31 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+                      horizontal: 20,
+                      vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Recording: ${_formatDuration(state.recordingDurationSeconds)}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.red.withOpacity(0.7),
+                        width: 2,
                       ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.circle, color: Colors.red, size: 14),
+                        const SizedBox(width: 8),
+                        Text(
+                          'REC ${_formatDuration(state.recordingDurationSeconds)}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -818,31 +870,66 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 8,
+                      vertical: 12,
                     ),
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(4),
+                      color: Colors.red.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    child: const Text(
-                      'Initial calibration required before recording',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        const Flexible(
+                          child: Text(
+                            'Calibration required before recording',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
 
-            // Controls at the bottom
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: _buildControls(state, calibrationNeeded),
-            ),
+            // Controls - positioned based on orientation
+            isLandscape
+                ? Positioned(
+                  right: 24,
+                  top: 0,
+                  bottom: 0,
+                  child: _buildLandscapeControls(
+                    state,
+                    calibrationNeeded,
+                    colorScheme,
+                  ),
+                )
+                : Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: _buildPortraitControls(
+                    state,
+                    calibrationNeeded,
+                    colorScheme,
+                  ),
+                ),
 
             // Calibration overlay
             if (state.status == RecordingStatus.calibrating)
@@ -882,30 +969,244 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     }
   }
 
-  Widget _buildControls(RecordingState state, bool calibrationNeeded) {
-    return Container(
-      color: Colors.black.withOpacity(0.5),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          if (state.status == RecordingStatus.recording)
-            FloatingActionButton(
-              onPressed: _stopRecording,
-              backgroundColor: Colors.red,
-              child: const Icon(Icons.stop, color: Colors.white),
-            )
-          else
-            FloatingActionButton(
-              onPressed:
-                  calibrationNeeded
-                      ? _checkCalibrationStatus
-                      : _startPreRecordingCalibration,
-              backgroundColor: calibrationNeeded ? Colors.grey : Colors.red,
-              child: const Icon(Icons.fiber_manual_record, color: Colors.white),
+  Widget _buildLandscapeControls(
+    RecordingState state,
+    bool calibrationNeeded,
+    ColorScheme colorScheme,
+  ) {
+    // Use primary color for all non-record buttons
+    final buttonColor = colorScheme.primary;
+
+    return Center(
+      child: Container(
+        width: 100,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Settings button (top)
+            _buildControlButton(
+              onPressed: () => context.pushNamed(AppRoutes.settings),
+              icon: Icons.settings,
+              label: 'Settings',
+              backgroundColor: buttonColor,
+              foregroundColor: Colors.white,
+              isLandscape: true,
+              buttonSize: 60,
             ),
-        ],
+
+            const SizedBox(height: 32),
+
+            // Record/Stop button (middle)
+            state.status == RecordingStatus.recording
+                ? _buildControlButton(
+                  onPressed: _stopRecording,
+                  icon: Icons.stop,
+                  label: 'Stop',
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  isMain: true,
+                  isLandscape: true,
+                  buttonSize: 70,
+                )
+                : _buildControlButton(
+                  onPressed:
+                      calibrationNeeded
+                          ? _checkCalibrationStatus
+                          : _startPreRecordingCalibration,
+                  icon: Icons.fiber_manual_record,
+                  label: 'Record',
+                  backgroundColor: calibrationNeeded ? Colors.grey : Colors.red,
+                  foregroundColor: Colors.white,
+                  isMain: true,
+                  isLandscape: true,
+                  buttonSize: 70,
+                ),
+
+            const SizedBox(height: 32),
+
+            // Recordings button (bottom)
+            _buildControlButton(
+              onPressed: () => context.pushNamed(AppRoutes.recordings),
+              icon: Icons.folder,
+              label: 'Recordings',
+              backgroundColor: buttonColor,
+              foregroundColor: Colors.white,
+              isLandscape: true,
+              buttonSize: 60,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildPortraitControls(
+    RecordingState state,
+    bool calibrationNeeded,
+    ColorScheme colorScheme,
+  ) {
+    // Use primary color for all non-record buttons
+    final buttonColor = colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            // Settings button (left side)
+            _buildControlButton(
+              onPressed: () => context.pushNamed(AppRoutes.settings),
+              icon: Icons.settings,
+              label: 'Settings',
+              backgroundColor: buttonColor,
+              foregroundColor: Colors.white,
+              isLandscape: false,
+              buttonSize: 60,
+            ),
+
+            // Record/Stop button (center)
+            state.status == RecordingStatus.recording
+                ? _buildControlButton(
+                  onPressed: _stopRecording,
+                  icon: Icons.stop,
+                  label: 'Stop',
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  isMain: true,
+                  isLandscape: false,
+                  buttonSize: 70,
+                )
+                : _buildControlButton(
+                  onPressed:
+                      calibrationNeeded
+                          ? _checkCalibrationStatus
+                          : _startPreRecordingCalibration,
+                  icon: Icons.fiber_manual_record,
+                  label: 'Record',
+                  backgroundColor: calibrationNeeded ? Colors.grey : Colors.red,
+                  foregroundColor: Colors.white,
+                  isMain: true,
+                  isLandscape: false,
+                  buttonSize: 70,
+                ),
+
+            // Recordings button (right side)
+            _buildControlButton(
+              onPressed: () => context.pushNamed(AppRoutes.recordings),
+              icon: Icons.folder,
+              label: 'Recordings',
+              backgroundColor: buttonColor,
+              foregroundColor: Colors.white,
+              isLandscape: false,
+              buttonSize: 60,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControlButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    required Color backgroundColor,
+    required Color foregroundColor,
+    bool isMain = false,
+    required bool isLandscape,
+    double buttonSize = 50,
+  }) {
+    if (isLandscape) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            onPressed: onPressed,
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+            elevation: 4,
+            heroTag: null,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(isMain ? 16 : 12),
+            ),
+            child: Icon(icon, size: isMain ? 32 : 24),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // For portrait mode
+    if (isMain) {
+      return FloatingActionButton.extended(
+        onPressed: onPressed,
+        backgroundColor: backgroundColor,
+        foregroundColor: foregroundColor,
+        elevation: 6,
+        heroTag: null,
+        extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: Icon(icon, size: 28),
+        label: Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+            fontSize: 16,
+          ),
+        ),
+      );
+    } else {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            onPressed: onPressed,
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+            elevation: 4,
+            heroTag: null,
+            mini: true,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
   }
 }

@@ -21,6 +21,9 @@ class RecordingListItem extends StatelessWidget {
   /// Callback for when the user taps on the item (view details)
   final VoidCallback? onTap;
 
+  /// Optional recording number to display (for the #N format)
+  final int? recordingNumber;
+
   /// Constructor
   const RecordingListItem({
     super.key,
@@ -29,6 +32,7 @@ class RecordingListItem extends StatelessWidget {
     this.onShare,
     this.onViewInFolder,
     this.onTap,
+    this.recordingNumber,
   });
 
   @override
@@ -65,10 +69,26 @@ class RecordingListItem extends StatelessWidget {
                   size: 30,
                 ),
               ),
-              title: Text(date, style: theme.textTheme.titleMedium),
+              title:
+                  recordingNumber != null
+                      ? Text(
+                        'Recording #$recordingNumber',
+                        style: theme.textTheme.titleMedium,
+                      )
+                      : Text(date, style: theme.textTheme.titleMedium),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const SizedBox(height: 4),
+                  // Add Session ID explicitly
+                  Text(
+                    'Session ID: ${recording.sessionId}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  // Date only shows if we're using the recording number format
+                  if (recordingNumber != null)
+                    Text('Date: $date', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),
                   Text('Time: $time', style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 4),

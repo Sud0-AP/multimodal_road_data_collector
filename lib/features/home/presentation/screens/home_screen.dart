@@ -41,10 +41,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
+    // Detect orientation for responsive layout
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+
+    // Get screen size for responsive adjustments
+    final screenSize = MediaQuery.of(context).size;
+    final screenWidth = screenSize.width;
+    final screenHeight = screenSize.height;
+
     // Get the calibration status to conditionally show the recording button
     final calibrationNeeded = ref.watch(calibrationNeededProvider);
     final calibrationCompleted = ref.watch(calibrationCompletedProvider);
     final showRecordButton = !calibrationNeeded || calibrationCompleted;
+
+    // Calculate appropriate heights for components based on orientation
+    final titleHeight = isLandscape ? 60.0 : 90.0;
+    final recordingsListMaxHeight =
+        isLandscape
+            ? screenHeight *
+                0.5 // 50% of screen height in landscape
+            : screenHeight * 0.43; // 43% of screen height in portrait
 
     return Scaffold(
       appBar: AppBar(
@@ -56,27 +73,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ).createShader(bounds),
-          child: Column(
-            children: [
-              Text(
-                'Multimodal',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 32,
-                ),
-              ),
-              Text(
-                'Road Data Collector',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 30,
-                ),
-              ),
-            ],
-          ),
+          child:
+              isLandscape
+                  ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Multimodal ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 24,
+                        ),
+                      ),
+                      Text(
+                        'Road Data Collector',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                        ),
+                      ),
+                    ],
+                  )
+                  : Column(
+                    children: [
+                      Text(
+                        'Multimodal',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 32,
+                        ),
+                      ),
+                      Text(
+                        'Road Data Collector',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 30,
+                        ),
+                      ),
+                    ],
+                  ),
         ),
         centerTitle: true,
-        toolbarHeight: 90,
+        toolbarHeight: titleHeight,
         elevation: 0,
         backgroundColor: colorScheme.surface,
         actions: [
@@ -88,126 +126,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 16), // Reduced gap after title
-              // Welcome description (removed redundant title)
-              Text(
-                'Collect and analyze road condition data with your device sensors',
-                style: textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
-              ),
-
-              const SizedBox(height: 24),
-
-              // Calibration card
-              _buildFeatureCard(
-                context,
-                icon: Icons.sensors,
-                title: 'Calibrate Sensors',
-                description:
-                    calibrationCompleted
-                        ? 'Sensors are calibrated and ready to use'
-                        : 'Calibrate device sensors for accurate data collection',
-                iconColor:
-                    calibrationCompleted ? Colors.green : colorScheme.primary,
-                onTap: () => context.pushNamed(AppRoutes.calibration),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Instructions card
-              _buildFeatureCard(
-                context,
-                icon: Icons.help_outline,
-                title: 'Instructions',
-                description:
-                    'Learn how to use the app and collect data properly',
-                iconColor: colorScheme.tertiary,
-                onTap: () {
-                  // Will implement navigation to Instructions later
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              // Recordings section header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Previous Recordings',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      // Button to open full recordings screen
-                      IconButton(
-                        icon: Icon(
-                          Icons.fullscreen,
-                          size: 24,
-                          color: colorScheme.primary,
-                        ),
-                        onPressed:
-                            () => context.pushNamed(AppRoutes.recordings),
-                        tooltip: 'View all recordings',
-                      ),
-                      // Refresh button
-                      IconButton(
-                        icon: Icon(
-                          Icons.refresh,
-                          size: 24,
-                          color: colorScheme.primary,
-                        ),
-                        onPressed: () {
-                          // Load recordings using the same provider used in RecordingsListScreen
-                          ref
-                              .read(recordingsNotifierProvider.notifier)
-                              .loadRecordings();
-                        },
-                        tooltip: 'Refresh recordings',
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Recordings list - further increased height
-              Expanded(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    // Slight adjustment to max height to prevent overlap with FAB
-                    maxHeight: MediaQuery.of(context).size.height * 0.43,
-                  ),
-                  child: _buildRecordingsList(context, ref),
-                ),
-              ),
-
-              // Add spacer to push content up and leave room for FAB
-              const SizedBox(height: 85),
-            ],
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child:
+                isLandscape
+                    ? _buildLandscapeLayout(context, recordingsListMaxHeight)
+                    : _buildPortraitLayout(context, recordingsListMaxHeight),
           ),
         ),
       ),
-      // Updated floating action button position and text
+      // Updated floating action button positioning
       floatingActionButton:
           showRecordButton
               ? Padding(
-                padding: const EdgeInsets.only(
-                  bottom:
-                      12.0, // ADJUST THIS VALUE: lower number = button closer to bottom of screen
-                ),
+                padding: EdgeInsets.only(bottom: isLandscape ? 8.0 : 12.0),
                 child: FloatingActionButton.extended(
                   onPressed: () => context.pushNamed(AppRoutes.recording),
                   label: const Text('Record Data'),
@@ -223,6 +156,216 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               )
               : null, // Don't show FAB if calibration is needed
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  // Portrait layout (stacked vertically)
+  Widget _buildPortraitLayout(
+    BuildContext context,
+    double recordingsListMaxHeight,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        // Welcome description
+        Text(
+          'Collect and analyze road condition data with your device sensors',
+          style: textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+
+        const SizedBox(height: 24),
+
+        // Calibration card
+        _buildFeatureCard(
+          context,
+          icon: Icons.sensors,
+          title: 'Calibrate Sensors',
+          description:
+              ref.watch(calibrationCompletedProvider)
+                  ? 'Sensors are calibrated and ready to use'
+                  : 'Calibrate device sensors for accurate data collection',
+          iconColor:
+              ref.watch(calibrationCompletedProvider)
+                  ? Colors.green
+                  : colorScheme.primary,
+          onTap: () => context.pushNamed(AppRoutes.calibration),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Instructions card
+        _buildFeatureCard(
+          context,
+          icon: Icons.help_outline,
+          title: 'Instructions',
+          description: 'Learn how to use the app and collect data properly',
+          iconColor: colorScheme.tertiary,
+          onTap: () {
+            // Will implement navigation to Instructions later
+          },
+        ),
+
+        const SizedBox(height: 24),
+
+        // Recordings section
+        _buildRecordingsSection(context, recordingsListMaxHeight),
+
+        // Add spacer to push content up and leave room for FAB
+        const SizedBox(height: 85),
+      ],
+    );
+  }
+
+  // Landscape layout (side-by-side arrangement)
+  Widget _buildLandscapeLayout(
+    BuildContext context,
+    double recordingsListMaxHeight,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    // Get screen width to calculate constraint
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        // Welcome description
+        Text(
+          'Collect and analyze road condition data with your device sensors',
+          style: textTheme.bodyLarge?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+
+        const SizedBox(height: 16),
+
+        // Two-column layout for feature cards
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left column - Calibration card
+            Expanded(
+              child: _buildFeatureCard(
+                context,
+                icon: Icons.sensors,
+                title: 'Calibrate Sensors',
+                description:
+                    ref.watch(calibrationCompletedProvider)
+                        ? 'Sensors are calibrated and ready to use'
+                        : 'Calibrate device sensors for accurate data collection',
+                iconColor:
+                    ref.watch(calibrationCompletedProvider)
+                        ? Colors.green
+                        : colorScheme.primary,
+                onTap: () => context.pushNamed(AppRoutes.calibration),
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            // Right column - Instructions card
+            Expanded(
+              child: _buildFeatureCard(
+                context,
+                icon: Icons.help_outline,
+                title: 'Instructions',
+                description:
+                    'Learn how to use the app and collect data properly',
+                iconColor: colorScheme.tertiary,
+                onTap: () {
+                  // Will implement navigation to Instructions later
+                },
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // Recordings section - Constrained width in landscape mode
+        Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: screenWidth * 0.65, // Reduced width in landscape mode
+            ),
+            child: _buildRecordingsSection(context, recordingsListMaxHeight),
+          ),
+        ),
+
+        // Spacer for FAB
+        const SizedBox(height: 70),
+      ],
+    );
+  }
+
+  // Extracted recordings section to avoid duplication
+  Widget _buildRecordingsSection(BuildContext context, double maxHeight) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Recordings section header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Previous Recordings',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            Row(
+              children: [
+                // Button to open full recordings screen
+                IconButton(
+                  icon: Icon(
+                    Icons.fullscreen,
+                    size: 24,
+                    color: colorScheme.primary,
+                  ),
+                  onPressed: () => context.pushNamed(AppRoutes.recordings),
+                  tooltip: 'View all recordings',
+                ),
+                // Refresh button
+                IconButton(
+                  icon: Icon(
+                    Icons.refresh,
+                    size: 24,
+                    color: colorScheme.primary,
+                  ),
+                  onPressed: () {
+                    ref
+                        .read(recordingsNotifierProvider.notifier)
+                        .loadRecordings();
+                  },
+                  tooltip: 'Refresh recordings',
+                ),
+              ],
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // Recordings list with fixed height
+        SizedBox(height: maxHeight, child: _buildRecordingsList(context, ref)),
+      ],
     );
   }
 
@@ -573,6 +716,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDisabled = onTap == null;
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+
+    // Adjust padding based on orientation
+    final cardPadding =
+        isLandscape
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 14)
+            : const EdgeInsets.all(20);
+
+    // Adjust icon size based on orientation
+    final iconSize = isLandscape ? 28.0 : 32.0;
+
+    // Adjust text styles based on orientation
+    final titleStyle = theme.textTheme.titleLarge?.copyWith(
+      fontWeight: FontWeight.bold,
+      color: isDisabled ? Colors.grey : colorScheme.onSurface,
+      fontSize: isLandscape ? 18 : null, // Smaller font in landscape
+    );
+
+    final descriptionStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: isDisabled ? Colors.grey : colorScheme.onSurfaceVariant,
+      fontSize: isLandscape ? 13 : null, // Smaller font in landscape
+    );
 
     return Card(
       elevation: 2,
@@ -590,19 +756,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: cardPadding,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(isLandscape ? 10 : 12),
                 decoration: BoxDecoration(
                   color: (iconColor ?? colorScheme.primary).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   icon,
-                  size: 32,
+                  size: iconSize,
                   color:
                       isDisabled
                           ? Colors.grey
@@ -614,23 +780,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isDisabled ? Colors.grey : colorScheme.onSurface,
-                      ),
-                    ),
+                    Text(title, style: titleStyle),
                     const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color:
-                            isDisabled
-                                ? Colors.grey
-                                : colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                    Text(description, style: descriptionStyle),
                   ],
                 ),
               ),
@@ -640,6 +792,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     isDisabled
                         ? Colors.grey.withOpacity(0.3)
                         : colorScheme.primary.withOpacity(0.6),
+                size: isLandscape ? 20 : 24,
               ),
             ],
           ),

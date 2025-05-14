@@ -25,16 +25,37 @@ class AnnotationPromptWidget extends StatefulWidget {
   State<AnnotationPromptWidget> createState() => _AnnotationPromptWidgetState();
 }
 
-class _AnnotationPromptWidgetState extends State<AnnotationPromptWidget> {
+class _AnnotationPromptWidgetState extends State<AnnotationPromptWidget>
+    with SingleTickerProviderStateMixin {
   /// Timer for automatic dismissal
   Timer? _timer;
 
   /// Remaining seconds for display
   int _remainingSeconds = 10;
 
+  /// Animation controller for entrance animation
+  late AnimationController _animationController;
+
+  /// Animation for the entrance effect
+  late Animation<double> _animation;
+
   @override
   void initState() {
     super.initState();
+
+    // Initialize animation controller
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    // Create animation for smooth entrance
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _animationController.forward();
 
     // Initialize remaining seconds from the display duration
     _remainingSeconds = widget.displayDuration.inSeconds;
@@ -56,6 +77,7 @@ class _AnnotationPromptWidgetState extends State<AnnotationPromptWidget> {
   @override
   void dispose() {
     _timer?.cancel();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -79,72 +101,240 @@ class _AnnotationPromptWidgetState extends State<AnnotationPromptWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final screenSize = MediaQuery.of(context).size;
+
+    // Container dimensions based on orientation
+    final containerWidth =
+        isLandscape ? screenSize.width * 0.6 : screenSize.width * 0.85;
+
+    // Use specified height for landscape instead of letting it adjust automatically
+    final containerHeight =
+        isLandscape
+            ? screenSize.height *
+                0.6 // 60% of screen height in landscape
+            : null; // Auto in portrait
+
+    // Use primary color from the theme
+    final primaryColor = theme.colorScheme.primary;
+
     return Material(
-      color: Colors.transparent,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.all(16.0),
-          width: MediaQuery.of(context).size.width * 0.85,
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(12.0),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.5),
-                blurRadius: 10,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Bump Detected!',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
+      // Make sure the Material widget covers the entire screen
+      type: MaterialType.transparency,
+      child: Container(
+        // Add the shadow background across the entire screen
+        width: double.infinity,
+        height: double.infinity,
+        color: Colors.black.withOpacity(0.7),
+        child: SafeArea(
+          child: FadeTransition(
+            opacity: _animation,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.all(20.0),
+                width: containerWidth,
+                height: containerHeight,
+                constraints:
+                    isLandscape ? const BoxConstraints(minHeight: 230) : null,
+                decoration: BoxDecoration(
+                  color: Colors.grey[850]?.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(16.0),
+                  border: Border.all(
+                    color: primaryColor.withOpacity(0.7),
+                    width: 2.0,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 15,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
+                child:
+                    isLandscape
+                        ? _buildLandscapeLayout(theme, primaryColor)
+                        : _buildPortraitLayout(theme, primaryColor),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Was this a pothole?',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Please classify the road anomaly:',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildResponseButton(
-                    label: 'Yes, Pothole',
-                    backgroundColor: Colors.green,
-                    onPressed: _handleYesResponse,
-                    fullWidth: true,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildResponseButton(
-                    label: 'No, Not Pothole',
-                    backgroundColor: Colors.red,
-                    onPressed: _handleNoResponse,
-                    fullWidth: true,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Dismissing in $_remainingSeconds seconds...',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Build layout for portrait orientation
+  Widget _buildPortraitLayout(ThemeData theme, Color primaryColor) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header with icon
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.warning_amber_rounded, color: primaryColor, size: 28),
+            const SizedBox(width: 10),
+            Text(
+              'Bump Detected!',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 24,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Was this a pothole?',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+
+        // Response buttons - larger and more spaced out for easy tapping while driving
+        _buildResponseButton(
+          label: 'YES - POTHOLE',
+          backgroundColor: theme.colorScheme.primary,
+          onPressed: _handleYesResponse,
+          fullWidth: true,
+          icon: Icons.check_circle_outline,
+        ),
+        const SizedBox(height: 16),
+        _buildResponseButton(
+          label: 'NO - NOT POTHOLE',
+          backgroundColor: theme.colorScheme.secondary,
+          onPressed: _handleNoResponse,
+          fullWidth: true,
+          icon: Icons.cancel_outlined,
+        ),
+        const SizedBox(height: 16),
+
+        // Timer indicator
+        LinearProgressIndicator(
+          value: _remainingSeconds / widget.displayDuration.inSeconds,
+          backgroundColor: Colors.grey.shade800,
+          valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+          minHeight: 6,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Auto-dismissing in $_remainingSeconds seconds',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  /// Build layout for landscape orientation
+  Widget _buildLandscapeLayout(ThemeData theme, Color primaryColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left side - Information
+        Expanded(
+          flex: 4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with icon
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: primaryColor,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 8),
+                    const Flexible(
+                      child: Text(
+                        'Bump Detected!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Was this a pothole?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                // Timer indicator
+                LinearProgressIndicator(
+                  value: _remainingSeconds / widget.displayDuration.inSeconds,
+                  backgroundColor: Colors.grey.shade800,
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$_remainingSeconds seconds remaining',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(width: 24),
+
+        // Right side - Buttons
+        Expanded(
+          flex: 6,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildResponseButton(
+                  label: 'YES - POTHOLE',
+                  backgroundColor: theme.colorScheme.primary,
+                  onPressed: _handleYesResponse,
+                  fullWidth: true,
+                  icon: Icons.check_circle_outline,
+                  height: 70,
+                ),
+                const SizedBox(height: 20),
+                _buildResponseButton(
+                  label: 'NO - NOT POTHOLE',
+                  backgroundColor: theme.colorScheme.secondary,
+                  onPressed: _handleNoResponse,
+                  fullWidth: true,
+                  icon: Icons.cancel_outlined,
+                  height: 70,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -154,20 +344,39 @@ class _AnnotationPromptWidgetState extends State<AnnotationPromptWidget> {
     required Color backgroundColor,
     required VoidCallback onPressed,
     bool fullWidth = false,
+    IconData? icon,
+    double? height,
   }) {
     return SizedBox(
       width: fullWidth ? double.infinity : null,
+      height: height ?? 56, // Increased height for better touchability
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 4,
         ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: height != null ? 24 : 20),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: height != null ? 18 : 16,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
       ),
     );

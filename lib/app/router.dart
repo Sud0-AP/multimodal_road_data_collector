@@ -12,6 +12,7 @@ import '../features/recording/presentation/screens/recording_screen.dart';
 import '../features/recordings/presentation/screens/recordings_list_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import '../features/home/presentation/screens/home_screen.dart';
+import '../features/instructions/presentation/screens/instructions_screen.dart';
 
 /// Routes names used throughout the app
 class AppRoutes {
@@ -21,6 +22,7 @@ class AppRoutes {
   static const String recording = 'recording';
   static const String recordings = 'recordings';
   static const String settings = 'settings';
+  static const String instructions = 'instructions';
 
   // Path names
   static const String onboardingPath = '/onboarding';
@@ -29,6 +31,7 @@ class AppRoutes {
   static const String recordingPath = '/recording';
   static const String recordingsPath = '/recordings';
   static const String settingsPath = '/settings';
+  static const String instructionsPath = '/instructions';
 }
 
 /// Provider for the initial onboarding status
@@ -81,6 +84,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.settingsPath,
         name: AppRoutes.settings,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.instructionsPath,
+        name: AppRoutes.instructions,
+        builder: (context, state) => const InstructionsScreen(),
       ),
     ],
   );

@@ -208,9 +208,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           title: 'Instructions',
           description: 'Learn how to use the app and collect data properly',
           iconColor: colorScheme.tertiary,
-          onTap: () {
-            // Will implement navigation to Instructions later
-          },
+          onTap: () => context.pushNamed(AppRoutes.instructions),
         ),
 
         const SizedBox(height: 24),
@@ -284,9 +282,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 description:
                     'Learn how to use the app and collect data properly',
                 iconColor: colorScheme.tertiary,
-                onTap: () {
-                  // Will implement navigation to Instructions later
-                },
+                onTap: () => context.pushNamed(AppRoutes.instructions),
               ),
             ),
           ],

@@ -22,14 +22,23 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>http</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>This app needs camera access to record road conditions and capture video for data collection purposes.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs photo library access to save recorded videos to a location you can easily access later.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app requests microphone access as part of camera functionalities, though audio recording is not a primary feature.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>This app uses motion sensors to detect road events like bumps and to understand device orientation during data collection.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app needs permission to save recorded road videos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs photo library access to save recorded videos to a location you can easily access later.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

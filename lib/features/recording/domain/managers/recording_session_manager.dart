@@ -5,14 +5,18 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:collection/collection.dart';
 
 import '../../../../core/services/sensor_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/ntp_service.dart';
 import '../../../../core/services/file_storage_service.dart';
 import '../../../../core/services/implementations/file_storage_service_impl.dart';
+import '../../../../core/utils/logger.dart';
 import '../models/corrected_sensor_data_point.dart';
 import '../../../../core/utils/ema_filter.dart';
+import '../../../../core/utils/isolate_logger.dart';
 
 /// Processed sensor data for recording and calibration
 class ProcessedSensorData {
@@ -97,8 +101,9 @@ Future<CsvWriteResult> _processBufferInBackground(CsvWriteData data) async {
       return CsvWriteResult.success(0, data.operationId);
     }
 
-    print(
-      '📝 CSV WRITE: Processing ${data.dataPoints.length} data points for ${data.sessionDirectory}',
+    // Using IsolateLogger instead of debugPrint for better logging format
+    IsolateLogger.file(
+      'Processing ${data.dataPoints.length} data points for ${data.sessionDirectory}',
     );
 
     // Create an instance of FileStorageServiceImpl without dependencies
@@ -111,7 +116,8 @@ Future<CsvWriteResult> _processBufferInBackground(CsvWriteData data) async {
       createIfNotExists: true,
     );
 
-    print('📝 CSV WRITE: Writing to file: $csvPath');
+    // Using IsolateLogger for consistent logging
+    IsolateLogger.file('Writing to file: $csvPath');
 
     // Verify directory exists
     final directory = await fileStorageService.createDirectory(
@@ -119,8 +125,10 @@ Future<CsvWriteResult> _processBufferInBackground(CsvWriteData data) async {
     );
 
     if (!directory) {
-      print(
-        '❌ CSV WRITE: Failed to create directory: ${data.sessionDirectory}',
+      // Using IsolateLogger for consistent error logging
+      IsolateLogger.error(
+        'FILE',
+        'Failed to create directory: ${data.sessionDirectory}',
       );
       return CsvWriteResult.failure(
         'Failed to create or access directory: ${data.sessionDirectory}',
@@ -136,8 +144,10 @@ Future<CsvWriteResult> _processBufferInBackground(CsvWriteData data) async {
     );
 
     if (!hasWriteAccess) {
-      print(
-        '❌ CSV WRITE: No write access to directory: ${data.sessionDirectory}',
+      // Using IsolateLogger for consistent error logging
+      IsolateLogger.error(
+        'FILE',
+        'No write access to directory: ${data.sessionDirectory}',
       );
       return CsvWriteResult.failure(
         'No write access to directory: ${data.sessionDirectory}',
@@ -155,18 +165,21 @@ Future<CsvWriteResult> _processBufferInBackground(CsvWriteData data) async {
     final success = await fileStorageService.appendToCsv(csvPath, rows);
 
     if (success) {
-      print('✅ CSV WRITE: Successfully wrote ${rows.length} rows to $csvPath');
+      // Using IsolateLogger for consistent success logging
+      IsolateLogger.file('Successfully wrote ${rows.length} rows to $csvPath');
       return CsvWriteResult.success(rows.length, data.operationId);
     } else {
-      print('❌ CSV WRITE: Failed to write data to CSV file: $csvPath');
+      // Using IsolateLogger for consistent error logging
+      IsolateLogger.error('FILE', 'Failed to write data to CSV file: $csvPath');
       return CsvWriteResult.failure(
         'Failed to write data to CSV file: no error details available',
         data.operationId,
       );
     }
-  } catch (e) {
+  } catch (e, stackTrace) {
     // Return detailed error information for debugging
-    print('❌ CSV WRITE ERROR: $e');
+    // Using IsolateLogger for consistent error logging
+    IsolateLogger.error('FILE', 'CSV write error', e, stackTrace);
     return CsvWriteResult.failure(
       'Error writing sensor data to CSV: $e',
       data.operationId,
@@ -354,99 +367,94 @@ class RecordingSessionManager {
   Future<int> updateDataPointsInWindow(
     int startTimestampMs,
     int endTimestampMs,
-    bool isBump,
-    String userFeedback,
+    Map<String, dynamic> updates,
   ) async {
-    // First, update any matching data points in the buffer
     int updatedCount = 0;
 
-    // Update in buffer
-    for (int i = 0; i < _sensorDataBuffer.length; i++) {
-      final dataPoint = _sensorDataBuffer[i];
-      if (dataPoint.timestampMs >= startTimestampMs &&
-          dataPoint.timestampMs <= endTimestampMs) {
-        _sensorDataBuffer[i] = dataPoint.copyWith(
-          isBump: isBump,
-          userFeedback: userFeedback,
-        );
-        updatedCount++;
+    try {
+      // First, try to update any data points still in the buffer
+      for (int i = 0; i < _sensorDataBuffer.length; i++) {
+        final dp = _sensorDataBuffer[i];
+        if (dp.timestampMs >= startTimestampMs &&
+            dp.timestampMs <= endTimestampMs) {
+          // Apply updates
+          final updated = dp.copyWith(
+            isBump: updates['isBump'] ?? dp.isBump,
+            // Note: using userFeedback instead of bumpSeverity/annotation
+            // which aren't defined in the model
+            userFeedback: updates['userFeedback'] ?? dp.userFeedback,
+          );
+          _sensorDataBuffer[i] = updated;
+          updatedCount++;
+        }
       }
-    }
 
-    // If we have a current session directory and a file storage service,
-    // we need to try to update the CSV file for data points that
-    // have already been flushed to disk
-    if (_currentSessionDirectory != null && _fileStorageService != null) {
-      try {
+      // Then, try to update data points that have already been written to the CSV
+      if (_currentSessionDirectory != null && _fileStorageService != null) {
         final csvPath = await _fileStorageService!.getSensorDataCsvPath(
           _currentSessionDirectory!,
-          createIfNotExists: false,
         );
 
-        // Read the existing CSV file if it exists
-        final csvFile = File(csvPath);
-        if (await csvFile.exists()) {
-          final csvContent = await csvFile.readAsString();
-          final lines = csvContent.split('\n');
+        if (await _fileStorageService!.fileExists(csvPath)) {
+          final csvString = await _fileStorageService!.readStringFromFile(
+            csvPath,
+          );
+          if (csvString != null) {
+            final lines = csvString.split('\n');
+            bool fileModified = false;
 
-          // Skip header row
-          bool fileModified = false;
-          for (int i = 1; i < lines.length; i++) {
-            final line = lines[i].trim();
-            if (line.isEmpty) continue;
-
-            final columns = line.split(',');
-            // Make sure we have enough columns to access timestamp, isBump, and userFeedback
-            if (columns.length >= 9) {
+            // Skip header row
+            for (int i = 1; i < lines.length; i++) {
               try {
-                final timestampMs = int.parse(columns[0]);
+                if (lines[i].trim().isEmpty) continue;
 
-                // Check if this row is within our window
-                if (timestampMs >= startTimestampMs &&
-                    timestampMs <= endTimestampMs) {
-                  // Create new columns array with the updated isBump and userFeedback
-                  final newColumns = List<String>.from(columns);
-                  // isBump column - use empty string for false/no bump
-                  newColumns[8] = isBump ? '1' : '';
+                final columns = lines[i].split(',');
+                if (columns.length >= 10) {
+                  // Make sure we have enough columns
+                  // Parse timestamp
+                  final timestampMs = int.tryParse(columns[0]);
+                  if (timestampMs == null) continue;
 
-                  // Handle user feedback (properly escape if needed)
-                  String escapedUserFeedback = userFeedback;
-                  if (userFeedback.contains(',') ||
-                      userFeedback.contains('"')) {
-                    // Double quotes are escaped with double quotes in CSV
-                    escapedUserFeedback =
-                        '"${userFeedback.replaceAll('"', '""')}"';
+                  if (timestampMs >= startTimestampMs &&
+                      timestampMs <= endTimestampMs) {
+                    final List<String> updatedColumns = List<String>.from(
+                      columns,
+                    );
+
+                    // Apply updates - note that column indices match the CSV format
+                    if (updates.containsKey('isBump')) {
+                      updatedColumns[8] =
+                          (updates['isBump'] as bool) ? '1' : '0';
+                    }
+                    if (updates.containsKey('userFeedback')) {
+                      updatedColumns[9] = updates['userFeedback'].toString();
+                    }
+
+                    // Replace the line in the file
+                    lines[i] = updatedColumns.join(',');
+                    fileModified = true;
+                    updatedCount++;
                   }
-
-                  // Make sure we have enough columns for userFeedback
-                  if (newColumns.length >= 10) {
-                    newColumns[9] = escapedUserFeedback; // userFeedback column
-                  } else if (newColumns.length == 9) {
-                    // Add userFeedback column if it doesn't exist
-                    newColumns.add(escapedUserFeedback);
-                  }
-
-                  // Replace the line in the file
-                  lines[i] = newColumns.join(',');
-                  fileModified = true;
-                  updatedCount++;
                 }
               } catch (e) {
                 // Skip invalid rows
-                debugPrint('Error parsing CSV row: $e');
+                Logger.error('CSV', 'Error parsing CSV row', e);
               }
             }
-          }
 
-          // Write the modified CSV back to the file if changes were made
-          if (fileModified) {
-            await csvFile.writeAsString(lines.join('\n'));
-            debugPrint('Updated CSV file on disk with bump annotations');
+            // Write the modified CSV back to the file if changes were made
+            if (fileModified) {
+              await _fileStorageService!.writeStringToFile(
+                lines.join('\n'),
+                csvPath,
+              );
+              Logger.file('Updated CSV file on disk with bump annotations');
+            }
           }
         }
-      } catch (e) {
-        debugPrint('Error updating CSV on disk: $e');
       }
+    } catch (e, stackTrace) {
+      Logger.error('CSV', 'Error updating CSV on disk', e, stackTrace);
     }
 
     return updatedCount;
@@ -492,7 +500,9 @@ class RecordingSessionManager {
   ) async {
     // Check if too many concurrent writes
     if (_concurrentWriteCount >= _maxConcurrentWrites) {
-      print('Too many concurrent write operations. Waiting for completion...');
+      Logger.recording(
+        'Too many concurrent write operations. Waiting for completion...',
+      );
       // Wait for any operation to complete before continuing
       await Future.any(
         _backgroundWriteCompleters.values.map((completer) => completer.future),
@@ -544,7 +554,8 @@ class RecordingSessionManager {
 
         if (retryCount < _maxRetryAttempts) {
           _retryAttempts[operationId] = retryCount + 1;
-          print(
+          Logger.warning(
+            'CSV',
             'CSV write failed, retrying (${retryCount + 1}/$_maxRetryAttempts): ${result.errorMessage}',
           );
 
@@ -570,7 +581,8 @@ class RecordingSessionManager {
           );
         }
 
-        print(
+        Logger.critical(
+          'CSV',
           'CSV write failed after $_maxRetryAttempts retries: ${result.errorMessage}',
         );
 
@@ -580,11 +592,12 @@ class RecordingSessionManager {
         completer.complete(result);
         return false;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       _failedWriteAttempts++;
       final errorMsg = 'Error writing buffer to file: $e';
-      print(errorMsg);
+      Logger.error('CSV', errorMsg, e, stackTrace);
 
+      // Handle write failure - attempt retry if below threshold
       // Create a failure result
       final result = CsvWriteResult.failure(errorMsg, operationId);
 
@@ -592,7 +605,8 @@ class RecordingSessionManager {
       final retryCount = _retryAttempts[operationId] ?? 0;
       if (retryCount < _maxRetryAttempts) {
         _retryAttempts[operationId] = retryCount + 1;
-        print(
+        Logger.warning(
+          'CSV',
           'CSV write error, retrying (${retryCount + 1}/$_maxRetryAttempts): $errorMsg',
         );
 
@@ -684,10 +698,10 @@ class RecordingSessionManager {
       // Check if any operations failed
       return results.every((result) => result.success);
     } on TimeoutException {
-      print('Timeout waiting for write operations to complete');
+      Logger.warning('CSV', 'Timeout waiting for write operations to complete');
       return false;
     } catch (e) {
-      print('Error waiting for write operations: $e');
+      Logger.error('CSV', 'Error waiting for write operations', e);
       return false;
     }
   }
@@ -717,25 +731,27 @@ class RecordingSessionManager {
     if (_ntpService != null) {
       try {
         _ntpStartTime = await _ntpService!.getCurrentNtpTime();
-        print('⏱️ SENSOR START: NTP time: ${_ntpStartTime!.toIso8601String()}');
+        Logger.sensor(
+          'SENSOR START: NTP time: ${_ntpStartTime!.toIso8601String()}',
+        );
       } catch (e) {
         // Fallback to device time if NTP fails
         _ntpStartTime = DateTime.now().toUtc();
-        print(
-          '⏱️ SENSOR START: Using device time (NTP failed): ${_ntpStartTime!.toIso8601String()}',
+        Logger.sensor(
+          'SENSOR START: Using device time (NTP failed): ${_ntpStartTime!.toIso8601String()}',
         );
-        print('⚠️ NTP Error: $e');
+        Logger.warning('NTP', 'Failed to get NTP time: $e');
       }
     } else {
       // No NTP service, use device time
       _ntpStartTime = DateTime.now().toUtc();
-      print(
-        '⏱️ SENSOR START: Using device time (no NTP service): ${_ntpStartTime!.toIso8601String()}',
+      Logger.sensor(
+        'SENSOR START: Using device time (no NTP service): ${_ntpStartTime!.toIso8601String()}',
       );
     }
 
-    print('⏱️ SENSOR START: Monotonic time: $_monotonicStartTimeMs ms');
-    print('📡 SENSOR: Starting data collection...');
+    Logger.sensor('SENSOR START: Monotonic time: $_monotonicStartTimeMs ms');
+    Logger.sensor('Starting data collection...');
 
     // Initialize sensor service if needed
     if (!_sensorService.isSensorDataCollectionActive()) {
@@ -746,60 +762,59 @@ class RecordingSessionManager {
     _sensorDataSubscription = _sensorService.getSensorDataStream().listen(
       _processSensorData,
       onError: (error) {
-        print('❌ SENSOR ERROR: $error');
+        Logger.error('SENSOR', 'Error in sensor data stream', error);
         _processedDataController.addError(error);
       },
     );
 
     _isDataCollectionActive = true;
-    print('✅ SENSOR: Data collection started');
+    Logger.sensor('Data collection started');
   }
 
   /// Stop collecting sensor data
-  Future<void> stopSensorDataCollection() async {
+  Future<bool> stopSensorDataCollection() async {
     if (!_isDataCollectionActive) {
-      return;
+      return true;
     }
 
-    print('📡 SENSOR: Stopping data collection...');
+    Logger.sensor('Stopping data collection...');
 
     // Record end timestamps (both monotonic and NTP)
     _monotonicEndTimeMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Attempt to get NTP time if service is available
     if (_ntpService != null) {
       try {
         _ntpEndTime = await _ntpService!.getCurrentNtpTime();
-        print('⏱️ SENSOR STOP: NTP time: ${_ntpEndTime!.toIso8601String()}');
+        Logger.sensor(
+          'SENSOR STOP: NTP time: ${_ntpEndTime!.toIso8601String()}',
+        );
       } catch (e) {
         // Fallback to device time if NTP fails
         _ntpEndTime = DateTime.now().toUtc();
-        print(
-          '⏱️ SENSOR STOP: Using device time (NTP failed): ${_ntpEndTime!.toIso8601String()}',
+        Logger.sensor(
+          'SENSOR STOP: Using device time (NTP failed): ${_ntpEndTime!.toIso8601String()}',
         );
-        print('⚠️ NTP Error: $e');
+        Logger.warning('NTP', 'Failed to get NTP time: $e');
       }
     } else {
       // No NTP service, use device time
       _ntpEndTime = DateTime.now().toUtc();
-      print(
-        '⏱️ SENSOR STOP: Using device time (no NTP service): ${_ntpEndTime!.toIso8601String()}',
+      Logger.sensor(
+        'SENSOR STOP: Using device time (no NTP service): ${_ntpEndTime!.toIso8601String()}',
       );
     }
 
-    print('⏱️ SENSOR STOP: Monotonic time: $_monotonicEndTimeMs ms');
+    Logger.sensor('SENSOR STOP: Monotonic time: $_monotonicEndTimeMs ms');
 
     // Calculate and log duration
     final durationMs = _monotonicEndTimeMs! - _monotonicStartTimeMs!;
-    print(
-      '⏱️ SENSOR: Recording duration: ${(durationMs / 1000).toStringAsFixed(2)} seconds',
+    Logger.sensor(
+      'Recording duration: ${(durationMs / 1000).toStringAsFixed(2)} seconds',
     );
 
     // Cancel subscription to sensor data stream
-    if (_sensorDataSubscription != null) {
-      await _sensorDataSubscription!.cancel();
-      _sensorDataSubscription = null;
-    }
+    await _sensorDataSubscription?.cancel();
+    _sensorDataSubscription = null;
 
     // Stop sensor service if needed
     if (_sensorService.isSensorDataCollectionActive()) {
@@ -808,40 +823,44 @@ class RecordingSessionManager {
 
     // Force flush any remaining buffer entries
     if (_sensorDataBuffer.isNotEmpty) {
-      print(
-        '📋 SENSOR: Flushing ${_sensorDataBuffer.length} remaining data points...',
+      Logger.sensor(
+        'Flushing ${_sensorDataBuffer.length} remaining data points...',
       );
-      final dataPoints = await flushBuffer();
-      if (onBufferFull != null) {
-        onBufferFull!(dataPoints);
-      }
+      await flushBuffer();
     }
 
     // Wait for all background write operations to complete
     // Use a timeout to avoid blocking indefinitely
-    print('📋 SENSOR: Waiting for all write operations to complete...');
+    Logger.sensor('Waiting for all write operations to complete...');
     final allWritesSuccessful = await waitForPendingWrites(
       timeout: Duration(seconds: 10),
     );
 
     if (!allWritesSuccessful) {
-      print(
-        '⚠️ SENSOR: Some CSV write operations did not complete successfully',
+      Logger.warning(
+        'SENSOR',
+        'Some CSV write operations did not complete successfully',
       );
     } else {
-      print('✅ SENSOR: All CSV write operations completed successfully');
+      Logger.sensor('All CSV write operations completed successfully');
     }
 
-    print('📊 SENSOR: Sampling stats - Wrote $_totalRowsWritten data points');
+    Logger.info(
+      'SENSOR',
+      'Sampling stats - Wrote $_totalRowsWritten data points',
+    );
     final samplingRate = calculateActualSamplingRateHz();
     if (samplingRate != null) {
-      print(
-        '📊 SENSOR: Actual sampling rate: ${samplingRate.toStringAsFixed(2)} Hz',
+      Logger.info(
+        'SENSOR',
+        'Actual sampling rate: ${samplingRate.toStringAsFixed(2)} Hz',
       );
     }
 
     _isDataCollectionActive = false;
-    print('✅ SENSOR: Data collection stopped');
+    Logger.sensor('Data collection stopped');
+
+    return allWritesSuccessful;
   }
 
   /// Set calibration values for sensor corrections
@@ -1045,7 +1064,7 @@ class RecordingSessionManager {
     );
 
     if (!allWritesSuccessful) {
-      print(
+      debugPrint(
         'Warning: Some CSV write operations did not complete successfully during session stop',
       );
     }

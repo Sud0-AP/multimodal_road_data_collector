@@ -707,6 +707,14 @@ class FileStorageServiceImpl implements FileStorageService {
 
         for (final entity in downloadEntities) {
           if (entity is Directory) {
+            final dirName = path.basename(entity.path);
+
+            // Skip the 'logs' directory - it's not a recording
+            if (dirName == 'logs') {
+              print('📂 RECORDINGS: Skipping logs directory: ${entity.path}');
+              continue;
+            }
+
             print(
               '📂 RECORDINGS: Found directory in Downloads: ${entity.path}',
             );
@@ -725,6 +733,14 @@ class FileStorageServiceImpl implements FileStorageService {
 
       for (final entity in entities) {
         if (entity is Directory) {
+          final dirName = path.basename(entity.path);
+
+          // Skip the 'logs' directory - it's not a recording
+          if (dirName == 'logs') {
+            print('📂 RECORDINGS: Skipping logs directory: ${entity.path}');
+            continue;
+          }
+
           print(
             '📂 RECORDINGS: Found potential session directory: ${entity.path}',
           );

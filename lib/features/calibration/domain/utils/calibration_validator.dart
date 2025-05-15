@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/initial_calibration_data.dart';
 import '../../../../core/services/sensor_service.dart';
+import '../../../../core/utils/logger.dart';
 
 /// Utility class to validate if recalibration is necessary
 class CalibrationValidator {
@@ -27,7 +28,9 @@ class CalibrationValidator {
     final calibrationTime = calibrationData.calibrationTimestamp;
     final elapsedTime = now - calibrationTime;
 
-    debugPrint('Time since last calibration: ${elapsedTime / 1000} seconds');
+    Logger.calibration(
+      'Time since last calibration: ${elapsedTime / 1000} seconds',
+    );
     return elapsedTime > maxCalibrationAge;
   }
 
@@ -39,7 +42,7 @@ class CalibrationValidator {
   ) async {
     // If no calibration data, definitely need calibration
     if (calibrationData == null) {
-      debugPrint('Recalibration needed: No previous calibration data');
+      Logger.calibration('Recalibration needed: No previous calibration data');
       return true;
     }
 
@@ -47,10 +50,10 @@ class CalibrationValidator {
     bool timeExpired = isRecalibrationNeededByTime(calibrationData);
 
     if (timeExpired) {
-      debugPrint('Recalibration needed: Time threshold exceeded');
+      Logger.calibration('Recalibration needed: Time threshold exceeded');
       return true;
     } else {
-      debugPrint('Recalibration not needed: Within time threshold');
+      Logger.calibration('Recalibration not needed: Within time threshold');
       return false;
     }
   }

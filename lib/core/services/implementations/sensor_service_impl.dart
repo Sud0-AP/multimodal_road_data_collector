@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:sensors_plus/sensors_plus.dart';
 
+import '../../../core/utils/logger.dart';
 import '../sensor_service.dart';
 
 /// Implementation of SensorService using the sensors_plus package
@@ -49,7 +50,9 @@ class SensorServiceImpl implements SensorService {
         const Duration(seconds: 1),
         onTimeout: () => throw TimeoutException('Gyroscope not responding'),
       );
+      Logger.info('SENSOR', 'Sensors initialized successfully');
     } catch (e) {
+      Logger.error('SENSOR', 'Sensor initialization failed', e);
       _sensorDataStreamController.addError(
         Exception('Sensor initialization failed: $e'),
       );
@@ -58,9 +61,15 @@ class SensorServiceImpl implements SensorService {
     }
 
     if (_sensorDataStreamController.isClosed) {
-      throw StateError(
+      final error = StateError(
         'SensorService has been disposed and cannot be reinitialized',
       );
+      Logger.critical(
+        'SENSOR',
+        'Cannot reinitialize disposed SensorService',
+        error,
+      );
+      throw error;
     }
   }
 
@@ -72,6 +81,10 @@ class SensorServiceImpl implements SensorService {
   @override
   Future<void> startSensorDataCollection() async {
     if (_isCollectionActive) {
+      Logger.debug(
+        'SENSOR',
+        'Sensor data collection already active, ignoring start request',
+      );
       return;
     }
 
@@ -81,6 +94,7 @@ class SensorServiceImpl implements SensorService {
 
     // Set collection as active
     _isCollectionActive = true;
+    Logger.info('SENSOR', 'Starting sensor data collection');
 
     // Subscribe to accelerometer events
     _accelerometerSubscription = accelerometerEvents.listen(
@@ -89,6 +103,7 @@ class SensorServiceImpl implements SensorService {
       },
       onError: (error) {
         // Handle errors
+        Logger.error('SENSOR', 'Accelerometer error', error);
         _sensorDataStreamController.addError(
           Exception('Accelerometer error: $error'),
         );
@@ -102,6 +117,7 @@ class SensorServiceImpl implements SensorService {
       },
       onError: (error) {
         // Handle errors
+        Logger.error('SENSOR', 'Gyroscope error', error);
         _sensorDataStreamController.addError(
           Exception('Gyroscope error: $error'),
         );
@@ -131,8 +147,9 @@ class SensorServiceImpl implements SensorService {
         if (_emissionCount % 100 == 0 &&
             (interval < _targetIntervalMs * 0.5 ||
                 interval > _targetIntervalMs * 1.5)) {
-          print(
-            'WARNING: Sensor emission interval ($interval ms) is deviating from target ($_targetIntervalMs ms)',
+          Logger.warning(
+            'SENSOR',
+            'Sensor emission interval ($interval ms) is deviating from target ($_targetIntervalMs ms)',
           );
         }
       }
@@ -155,8 +172,14 @@ class SensorServiceImpl implements SensorService {
   @override
   Future<void> stopSensorDataCollection() async {
     if (!_isCollectionActive) {
+      Logger.debug(
+        'SENSOR',
+        'Sensor data collection not active, ignoring stop request',
+      );
       return;
     }
+
+    Logger.info('SENSOR', 'Stopping sensor data collection');
 
     // Cancel accelerometer subscription
     await _accelerometerSubscription?.cancel();
@@ -185,6 +208,8 @@ class SensorServiceImpl implements SensorService {
 
   @override
   Future<void> dispose() async {
+    Logger.debug('SENSOR', 'Disposing SensorService');
+
     // Stop data collection if active
     await stopSensorDataCollection();
 

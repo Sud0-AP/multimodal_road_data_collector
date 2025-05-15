@@ -10,6 +10,7 @@ import '../../../../core/services/camera_service.dart';
 import '../../../../core/services/file_storage_service.dart';
 import '../../../../core/services/permission_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../features/calibration/presentation/state/calibration_provider.dart';
 import '../../../../features/calibration/data/repositories/providers.dart';
 import '../../domain/managers/recording_session_manager.dart';
@@ -80,7 +81,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       // Re-initialize spike detection if needed
       final spikeDetectionNotifier = ref.read(spikeDetectionProvider.notifier);
       if (!ref.read(spikeDetectionProvider).isDetectionActive) {
-        debugPrint('🔄 Re-initializing spike detection after state change');
+        Logger.recording('Re-initializing spike detection after state change');
         spikeDetectionNotifier.initialize(
           bumpThreshold: recordingState.bumpThreshold!,
           refractoryPeriodMs: 8000,
@@ -263,13 +264,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
       // Create a session directory for this recording
       final sessionDir = await _fileStorageService.createSessionDirectory();
-      debugPrint('📁 RECORDING: Created session directory: $sessionDir');
+      Logger.file('Created session directory: $sessionDir');
 
       // Update recording state with session path
       notifier.setSessionPath(sessionDir);
 
-      debugPrint(
-        '🎬 VIDEO: Starting recording session at ${DateTime.now().toIso8601String()}',
+      Logger.recording(
+        'Starting recording session at ${DateTime.now().toIso8601String()}',
       );
 
       // Start the recording session using the lifecycle-aware provider
@@ -286,9 +287,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
 
       // Start video recording
       await _cameraService.startVideoRecording();
-      debugPrint(
-        '🎥 VIDEO: Recording started at ${DateTime.now().toIso8601String()}',
-      );
+      Logger.camera('Recording started at ${DateTime.now().toIso8601String()}');
 
       notifier.startRecording();
 
@@ -297,7 +296,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         notifier.updateDuration(timer.tick);
       });
     } catch (e) {
-      debugPrint('❌ ERROR starting recording: $e');
+      Logger.error('RECORDING', 'Error starting recording', e);
       ref
           .read(recordingStateProvider.notifier)
           .setError('Error starting recording: $e');
@@ -362,8 +361,9 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     // we should log this special case (as the CSV will have incorrect isBump flags)
     if (spikeDetected && !updated) {
       // Consider logging this special case for debugging
-      debugPrint(
-        '⚠️ Bump was detected but data point was already written to CSV',
+      Logger.warning(
+        'RECORDING',
+        'Bump was detected but data point was already written to CSV',
       );
     }
 
@@ -418,11 +418,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
     _recordingSessionManager.updateDataPointsInWindow(
       windowStartMs,
       windowEndMs,
-      isBump,
-      response,
+      {'isBump': isBump, 'userFeedback': response},
     );
 
-    debugPrint(
+    Logger.recording(
       'Annotation logged: $spikeTimestamp,$response with window [$windowStartMs-$windowEndMs]ms',
     );
   }
@@ -437,8 +436,8 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       // Stop spike detection
       ref.read(spikeDetectionProvider.notifier).stopDetection();
 
-      debugPrint(
-        '🎬 VIDEO: Stopping recording at ${DateTime.now().toIso8601String()}',
+      Logger.recording(
+        'Stopping recording at ${DateTime.now().toIso8601String()}',
       );
 
       // Get the current session directory before stopping the recording
@@ -446,7 +445,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       final recordingState = ref.read(recordingStateProvider);
       final sessionDir = recordingState.sessionPath;
       if (sessionDir == null) {
-        debugPrint('⚠️ Warning: No session directory in state, creating one');
+        Logger.warning(
+          'RECORDING',
+          'No session directory in state, creating one',
+        );
         // If session directory is null, get it from the recording manager
         // or create one as a fallback
         final sessionDirectory =
@@ -454,7 +456,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
         ref
             .read(recordingStateProvider.notifier)
             .setSessionPath(sessionDirectory);
-        debugPrint(
+        Logger.recording(
           '📁 RECORDING: Created fallback session directory: $sessionDirectory',
         );
       }
@@ -468,12 +470,12 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       _sensorDataSubscription = null;
 
       // Stop video recording
-      debugPrint('🎥 VIDEO: Stopping video recording...');
+      Logger.recording('🎥 VIDEO: Stopping video recording...');
       final videoPath = await _cameraService.stopVideoRecording();
-      debugPrint(
+      Logger.recording(
         '🎥 VIDEO: Recording stopped at ${DateTime.now().toIso8601String()}',
       );
-      debugPrint('🎥 VIDEO: Temporary video path: $videoPath');
+      Logger.recording('🎥 VIDEO: Temporary video path: $videoPath');
 
       ref.read(recordingStateProvider.notifier).stopRecording(videoPath);
 
@@ -486,7 +488,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       }
 
       // Save the video to the session directory
-      debugPrint(
+      Logger.recording(
         '🎥 VIDEO: Saving video from $videoPath to $updatedSessionDir',
       );
       final savedPath = await _fileStorageService.saveVideoToSession(
@@ -498,12 +500,13 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       final savedFile = File(savedPath);
       final exists = await savedFile.exists();
       if (!exists) {
-        debugPrint(
+        Logger.warning(
+          'RECORDING',
           '❌ ERROR: Saved video file does not exist at path: $savedPath',
         );
       } else {
         final size = await savedFile.length();
-        debugPrint(
+        Logger.recording(
           '✅ VIDEO: Saved successfully at: $savedPath (${(size / 1024 / 1024).toStringAsFixed(2)} MB)',
         );
       }
@@ -533,16 +536,16 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       final csvFile = File(csvPath);
       final csvExists = await csvFile.exists();
 
-      debugPrint('📊 VERIFICATION: Video directory: $videoDir');
-      debugPrint('📊 VERIFICATION: CSV path: $csvPath');
-      debugPrint('📊 VERIFICATION: CSV exists: $csvExists');
+      Logger.recording('📊 VERIFICATION: Video directory: $videoDir');
+      Logger.recording('📊 VERIFICATION: CSV path: $csvPath');
+      Logger.recording('📊 VERIFICATION: CSV exists: $csvExists');
 
       if (csvExists) {
         final csvSize = await csvFile.length();
-        debugPrint(
+        Logger.recording(
           '📊 VERIFICATION: CSV file size: ${(csvSize / 1024).toStringAsFixed(2)} KB',
         );
-        debugPrint(
+        Logger.recording(
           '📊 VERIFICATION: CSV contains approximately ${csvSize ~/ 100} data points',
         );
       }
@@ -565,7 +568,7 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
       if (calculatedRate != null && calculatedRate > 0) {
         // Use the calculated rate from session manager if available
         actualSamplingRate = calculatedRate;
-        debugPrint(
+        Logger.recording(
           '📊 SENSOR RATE: Using calculated rate: ${actualSamplingRate.toStringAsFixed(2)} Hz',
         );
       } else {
@@ -583,21 +586,21 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             // Calculate using the recording duration and approximate data points
             actualSamplingRate =
                 approximateDataPoints / recState.recordingDurationSeconds;
-            debugPrint(
+            Logger.recording(
               '📊 SENSOR RATE: Calculated from CSV size: ${actualSamplingRate.toStringAsFixed(2)} Hz',
             );
           } else {
             // Fallback method 2: Use a more reasonable default based on device capabilities
             actualSamplingRate =
                 100.0; // More realistic default than 50Hz for modern devices
-            debugPrint(
+            Logger.recording(
               '📊 SENSOR RATE: Using default rate (100 Hz) as CSV file not found',
             );
           }
         } catch (e) {
           // Final fallback: Use a reasonable default
           actualSamplingRate = 100.0;
-          debugPrint(
+          Logger.recording(
             '📊 SENSOR RATE: Using default rate (100 Hz) due to error: $e',
           );
         }
@@ -649,10 +652,10 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
             .generateAndSaveMetadata(updatedSessionDir, recordingData);
 
         if (metadataSuccess) {
-          debugPrint('✅ METADATA: Generated and saved successfully');
+          Logger.recording('✅ METADATA: Generated and saved successfully');
         } else {
           // If the service-level save fails, try a direct file write as a fallback
-          debugPrint(
+          Logger.recording(
             '⚠️ METADATA: Primary method failed, trying fallback method',
           );
 
@@ -681,20 +684,23 @@ class _RecordingScreenState extends ConsumerState<RecordingScreen> {
           );
 
           if (fallbackSuccess) {
-            debugPrint('✅ METADATA: Fallback method successful');
+            Logger.recording('✅ METADATA: Fallback method successful');
           } else {
-            debugPrint('❌ METADATA: All metadata generation methods failed');
+            Logger.error('METADATA', 'All metadata generation methods failed');
             // Even if metadata fails, we don't throw an exception here
             // The recording is still valid and usable without metadata
           }
         }
       } catch (e) {
         // Log the error but continue - metadata is helpful but not critical
-        debugPrint('❌ METADATA ERROR: $e');
-        debugPrint('⚠️ Continuing without metadata - recording is still saved');
+        Logger.error('METADATA', 'Error generating metadata', e);
+        Logger.warning(
+          'RECORDING',
+          'Continuing without metadata - recording is still saved',
+        );
       }
     } catch (e) {
-      debugPrint('❌ ERROR stopping recording: $e');
+      Logger.error('RECORDING', 'Error stopping recording', e);
       ref
           .read(recordingStateProvider.notifier)
           .setError('Error stopping recording: $e');

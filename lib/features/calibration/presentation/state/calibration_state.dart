@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multimodal_road_data_collector/core/services/providers.dart';
 import 'package:multimodal_road_data_collector/core/services/sensor_service.dart';
+import 'package:multimodal_road_data_collector/core/utils/logger.dart';
 import 'package:multimodal_road_data_collector/features/calibration/data/repositories/providers.dart';
 import 'package:multimodal_road_data_collector/features/calibration/domain/models/initial_calibration_data.dart';
 import 'package:multimodal_road_data_collector/features/calibration/domain/repositories/calibration_repository.dart';
@@ -356,18 +357,18 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
     final avgY = sumY / dataPoints.length;
     final avgZ = sumZ / dataPoints.length;
 
-    // Debug print to help diagnose orientation issues
-    print('Accelerometer Raw Avg X: $avgX, Y: $avgY, Z: $avgZ');
+    // Log to help diagnose orientation issues
+    Logger.sensor('Accelerometer Raw Avg X: $avgX, Y: $avgY, Z: $avgZ');
 
     // Calculate the magnitude of the acceleration vector
     final magnitude = sqrt(avgX * avgX + avgY * avgY + avgZ * avgZ);
 
-    print('Magnitude: $magnitude (Expected ~9.81)');
+    Logger.sensor('Magnitude: $magnitude (Expected ~9.81)');
 
     // Check if the magnitude is reasonable (close to standard gravity)
     // Allow more flexibility for real devices
     if ((magnitude - _standardGravity).abs() > 2.5) {
-      print('Magnitude too far from standard gravity');
+      Logger.sensor('Magnitude too far from standard gravity');
       return DeviceOrientation.unknown;
     }
 
@@ -381,9 +382,11 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
     final absY = normalizedY.abs();
     final absZ = normalizedZ.abs();
 
-    // Debug print values to help diagnose orientation
-    print('Normalized X: $normalizedX, Y: $normalizedY, Z: $normalizedZ');
-    print('Absolute X: $absX, Y: $absY, Z: $absZ');
+    // Log values to help diagnose orientation
+    Logger.sensor(
+      'Normalized X: $normalizedX, Y: $normalizedY, Z: $normalizedZ',
+    );
+    Logger.sensor('Absolute X: $absX, Y: $absY, Z: $absZ');
 
     // On Android, typical orientations are:
     // Device lying flat on table, screen up: Z around -1.0
@@ -396,19 +399,19 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
 
     // Device flat (screen facing up)
     if (absZ > threshold && normalizedZ < 0) {
-      print('Detected flat orientation');
+      Logger.sensor('Detected flat orientation');
       return DeviceOrientation.flat;
     }
 
     // Portrait orientation (phone standing upright)
     if (absY > threshold && normalizedY < 0) {
-      print('Detected portrait orientation');
+      Logger.sensor('Detected portrait orientation');
       return DeviceOrientation.portrait;
     }
 
     // Landscape orientations
     if (absX > threshold) {
-      print('Detected landscape orientation');
+      Logger.sensor('Detected landscape orientation');
       // Check the sign of X to determine which landscape orientation
       return (normalizedX > 0)
           ? DeviceOrientation.landscapeRight
@@ -419,13 +422,13 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
     const looseThreshold = 0.5;
 
     if (absZ > looseThreshold && normalizedZ < 0) {
-      print('Detected flat orientation (loose threshold)');
+      Logger.sensor('Detected flat orientation (loose threshold)');
       return DeviceOrientation.flat;
     } else if (absY > looseThreshold && normalizedY < 0) {
-      print('Detected portrait orientation (loose threshold)');
+      Logger.sensor('Detected portrait orientation (loose threshold)');
       return DeviceOrientation.portrait;
     } else if (absX > looseThreshold) {
-      print('Detected landscape orientation (loose threshold)');
+      Logger.sensor('Detected landscape orientation (loose threshold)');
       return (normalizedX > 0)
           ? DeviceOrientation.landscapeRight
           : DeviceOrientation.landscapeLeft;
@@ -433,19 +436,19 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
 
     // If we can't definitively determine orientation, use simple majority rule
     if (absX > absY && absX > absZ) {
-      print('Detected landscape using majority rule');
+      Logger.sensor('Detected landscape using majority rule');
       return normalizedX > 0
           ? DeviceOrientation.landscapeRight
           : DeviceOrientation.landscapeLeft;
     } else if (absY > absX && absY > absZ) {
-      print('Detected portrait using majority rule');
+      Logger.sensor('Detected portrait using majority rule');
       return DeviceOrientation.portrait;
     } else if (absZ > absX && absZ > absY) {
-      print('Detected flat using majority rule');
+      Logger.sensor('Detected flat using majority rule');
       return DeviceOrientation.flat;
     }
 
-    print('Could not detect orientation, defaulting to unknown');
+    Logger.sensor('Could not detect orientation, defaulting to unknown');
     return DeviceOrientation.unknown;
   }
 
@@ -534,10 +537,16 @@ class CalibrationNotifier extends StateNotifier<CalibrationState> {
             currentFrameHasMovement = true;
             consecutiveMovementFrames++;
 
-            // Print debug info for movement detection
-            print('Movement detected: Frame $consecutiveMovementFrames');
-            print('AccX: $deltaAccX, AccY: $deltaAccY, AccZ: $deltaAccZ');
-            print('GyroX: $deltaGyroX, GyroY: $deltaGyroY, GyroZ: $deltaGyroZ');
+            // Log debug info for movement detection
+            Logger.sensor(
+              'Movement detected: Frame $consecutiveMovementFrames',
+            );
+            Logger.sensor(
+              'AccX: $deltaAccX, AccY: $deltaAccY, AccZ: $deltaAccZ',
+            );
+            Logger.sensor(
+              'GyroX: $deltaGyroX, GyroY: $deltaGyroY, GyroZ: $deltaGyroZ',
+            );
           } else {
             // Only reset the counter if we've had several consecutive good frames
             // This prevents a single good frame from resetting the counter

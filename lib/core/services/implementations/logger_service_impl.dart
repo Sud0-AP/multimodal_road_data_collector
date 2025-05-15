@@ -11,6 +11,9 @@ class LoggerServiceImpl implements LoggerService {
   /// Date format for timestamps in logs
   static final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss.SSS');
 
+  /// Date format for session directories
+  static final DateFormat _sessionDirFormat = DateFormat('yyyyMMdd_HHmmss');
+
   /// File storage service for writing logs
   final FileStorageService _fileStorageService;
 
@@ -20,11 +23,20 @@ class LoggerServiceImpl implements LoggerService {
   /// Current active debug session ID
   String? _currentSessionId;
 
+  /// Current debug session directory path
+  String? _currentSessionDirectoryPath;
+
   /// Current log file path
   String? _currentLogFilePath;
 
+  /// Base logs directory path
+  String? _logsDirectory;
+
   /// Flag to indicate if debug mode is active
   bool _isDebugSessionActive = false;
+
+  /// Static instance to ensure we have only one logger instance
+  static String? _appSessionId;
 
   /// Constructor
   LoggerServiceImpl({
@@ -35,54 +47,80 @@ class LoggerServiceImpl implements LoggerService {
 
   @override
   Future<void> initialize() async {
-    // No initialization required for now
-    // In the future, we might want to:
-    // - Check if previous sessions were interrupted
-    // - Create log directory if it doesn't exist
-    // - Set up log rotation policies
+    // Setup the consistent logs directory
+    final baseDirectory = await _fileStorageService.getSessionsBaseDirectory();
+    _logsDirectory = path.join(baseDirectory, 'logs');
+    await _fileStorageService.createDirectory(_logsDirectory!);
   }
 
   @override
   Future<String> startDebugSession() async {
-    if (_isDebugSessionActive) {
-      // If already active, just return current session ID
+    // If already active, just return current session ID instead of creating a new one
+    if (_isDebugSessionActive && _currentSessionId != null) {
+      // Log that an attempt was made to start a session when one is already active
+      await info(
+        'LoggerService',
+        'Debug session already active, reusing existing session',
+      );
       return _currentSessionId!;
     }
 
-    // Generate a new session ID based on timestamp
-    final timestamp = DateTime.now();
-    final sessionId = 'debug_${timestamp.millisecondsSinceEpoch}';
-    _currentSessionId = sessionId;
+    // Make sure the logs directory is initialized
+    if (_logsDirectory == null) {
+      await initialize();
+    }
 
-    // Create log directory
-    final baseDirectory = await _fileStorageService.getSessionsBaseDirectory();
-    final logsDirectory = path.join(baseDirectory, 'logs');
-    await _fileStorageService.createDirectory(logsDirectory);
+    // Generate a new session ID based on timestamp if we don't have an app-wide one yet
+    if (_appSessionId == null) {
+      final timestamp = DateTime.now();
+      _appSessionId = 'debug_${timestamp.millisecondsSinceEpoch}';
+    }
 
-    // Create session-specific directory
-    final sessionDirectory = path.join(logsDirectory, sessionId);
-    await _fileStorageService.createDirectory(sessionDirectory);
+    // Use the app-wide session ID
+    _currentSessionId = _appSessionId;
 
-    // Create main log file
-    _currentLogFilePath = path.join(sessionDirectory, 'app.log');
-
-    // Write initial log entry
-    final initialEntry = _formatLogEntry(
-      'INFO',
-      'LoggerService',
-      'Debug session started. Device: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+    // Create a directory for this debug session
+    _currentSessionDirectoryPath = path.join(
+      _logsDirectory!,
+      _currentSessionId!,
     );
+    await _fileStorageService.createDirectory(_currentSessionDirectoryPath!);
 
-    await _fileStorageService.writeStringToFile(
-      initialEntry,
-      _currentLogFilePath!,
-    );
+    // Create a single app.log file inside the session directory
+    _currentLogFilePath = path.join(_currentSessionDirectoryPath!, 'app.log');
+
+    // Check if the file already exists before writing initial entry
+    bool fileExists = await File(_currentLogFilePath!).exists();
+
+    if (!fileExists) {
+      // Write initial log entry only if this is a new file
+      final initialEntry = _formatLogEntry(
+        'INFO',
+        'LoggerService',
+        'Debug session started. Device: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+      );
+
+      await _fileStorageService.writeStringToFile(
+        initialEntry,
+        _currentLogFilePath!,
+      );
+
+      // Log basic device info
+      await info('LoggerService', 'App Version: ${AppConstants.appVersion}');
+    } else {
+      // Just append a session continued message
+      final continueEntry = _formatLogEntry(
+        'INFO',
+        'LoggerService',
+        'Debug session continued by user from settings',
+      );
+
+      final file = File(_currentLogFilePath!);
+      await file.writeAsString(continueEntry, mode: FileMode.append);
+    }
+
     _isDebugSessionActive = true;
-
-    // Log basic device info
-    await info('LoggerService', 'App Version: ${AppConstants.appVersion}');
-
-    return sessionId;
+    return _currentSessionId!;
   }
 
   @override
@@ -109,6 +147,7 @@ class LoggerServiceImpl implements LoggerService {
     _isDebugSessionActive = false;
     _currentSessionId = null;
     _currentLogFilePath = null;
+    _currentSessionDirectoryPath = null;
   }
 
   @override
@@ -182,44 +221,49 @@ class LoggerServiceImpl implements LoggerService {
 
   @override
   Future<List<String>> getLogFilePaths([String? sessionId]) async {
-    final baseDirectory = await _fileStorageService.getSessionsBaseDirectory();
-    final logsDirectory = path.join(baseDirectory, 'logs');
+    // Ensure logs directory exists
+    if (_logsDirectory == null) {
+      await initialize();
+    }
 
     // If directory doesn't exist, return empty list
-    if (!await Directory(logsDirectory).exists()) {
+    if (!await Directory(_logsDirectory!).exists()) {
       return [];
     }
 
     if (sessionId != null) {
-      // Get logs for specific session
-      final sessionDirectory = path.join(logsDirectory, sessionId);
-
-      if (!await Directory(sessionDirectory).exists()) {
-        return [];
+      // Check if session directory exists
+      final sessionDirectory = path.join(_logsDirectory!, sessionId);
+      if (await Directory(sessionDirectory).exists()) {
+        return _fileStorageService.listFilesWithExtension(
+          sessionDirectory,
+          '.log',
+        );
       }
-
-      return _fileStorageService.listFilesWithExtension(
-        sessionDirectory,
-        '.log',
-      );
+      return [];
     } else {
-      // Get logs from all sessions
+      // Get all log files from all session directories
       List<String> allLogFiles = [];
-
-      // Get all session directories
-      final sessionDirs = await _fileStorageService.listFiles(logsDirectory);
-
-      // For each session directory, get all log files
-      for (final sessionDir in sessionDirs) {
-        if (await Directory(sessionDir).exists()) {
-          final logFiles = await _fileStorageService.listFilesWithExtension(
-            sessionDir,
-            '.log',
-          );
-          allLogFiles.addAll(logFiles);
+      try {
+        final logsDir = Directory(_logsDirectory!);
+        await for (final entity in logsDir.list()) {
+          if (entity is Directory &&
+              path.basename(entity.path).startsWith('debug_')) {
+            final sessionLogFiles = await _fileStorageService
+                .listFilesWithExtension(entity.path, '.log');
+            allLogFiles.addAll(sessionLogFiles);
+          }
         }
-      }
 
+        // Sort by modification time in descending order (most recent first)
+        allLogFiles.sort((a, b) {
+          final fileA = File(a);
+          final fileB = File(b);
+          return fileB.lastModifiedSync().compareTo(fileA.lastModifiedSync());
+        });
+      } catch (e) {
+        print('Error listing log files: $e');
+      }
       return allLogFiles;
     }
   }

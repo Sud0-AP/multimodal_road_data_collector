@@ -2,12 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:multimodal_road_data_collector/core/services/providers.dart';
+import 'package:multimodal_road_data_collector/core/services/sensor_service.dart';
+import 'package:multimodal_road_data_collector/core/utils/logger.dart';
+import 'package:multimodal_road_data_collector/features/calibration/data/repositories/providers.dart';
+import 'package:multimodal_road_data_collector/features/calibration/domain/models/initial_calibration_data.dart';
+import 'package:multimodal_road_data_collector/features/calibration/domain/utils/calibration_validator.dart';
+import 'package:multimodal_road_data_collector/features/calibration/presentation/state/calibration_provider.dart';
+import 'package:multimodal_road_data_collector/features/calibration/presentation/state/calibration_state.dart';
 
 import '../../../../app/router.dart';
-import '../../../../core/services/providers.dart';
-import '../../../../core/services/sensor_service.dart';
-import '../../data/repositories/providers.dart';
-import '../../domain/models/initial_calibration_data.dart';
 import '../../domain/utils/calibration_validator.dart';
 import '../state/calibration_provider.dart';
 import '../state/calibration_state.dart';
@@ -160,7 +164,10 @@ class _InitialCalibrationScreenState
         }
       }
     } catch (e) {
-      debugPrint('Error checking existing calibration data: $e');
+      Logger.error(
+        'CALIBRATION',
+        'Error checking existing calibration data: $e',
+      );
       // We don't set an error state here because it's not critical
       // The user can still perform a new calibration
       setState(() {
@@ -197,9 +204,15 @@ class _InitialCalibrationScreenState
         );
         // Force delete existing calibration data
         await repository.clearCalibrationData();
-        debugPrint('Previous calibration data cleared for fresh calibration');
+        Logger.info(
+          'CALIBRATION',
+          'Previous calibration data cleared for fresh calibration',
+        );
       } catch (e) {
-        debugPrint('Error clearing previous calibration data: $e');
+        Logger.error(
+          'CALIBRATION',
+          'Error clearing previous calibration data: $e',
+        );
         // Continue anyway as we'll overwrite the data
       }
     }

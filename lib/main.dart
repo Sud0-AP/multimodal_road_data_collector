@@ -1,15 +1,55 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
+import 'app/providers.dart';
+import 'core/utils/logger.dart';
+import 'constants/app_constants.dart';
 
-void main() {
+void main() async {
   // Ensure Flutter is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Create a container for accessing providers before the ProviderScope is created
+  final container = ProviderContainer();
+
+  // Initialize the logger with error handling
+  try {
+    // Start a debug session if in debug mode
+    final loggerService = await container.read(loggerServiceProvider);
+    Logger.init(loggerService);
+
+    // Initial log entries to verify logging is working
+    Logger.info(
+      'APP',
+      'Application starting in ${kReleaseMode ? 'RELEASE' : 'DEBUG'} mode',
+    );
+    Logger.info('APP', 'App version: ${AppConstants.appVersion}');
+
+    if (!kReleaseMode) {
+      // Start a debug session in debug mode (not release)
+      await loggerService.startDebugSession();
+      Logger.debug('APP', 'Debug logging session started');
+    }
+
+    Logger.info('APP', 'Logger initialized successfully');
+  } catch (e, stackTrace) {
+    // Handle initialization failure - fallback to print for fatal errors
+    debugPrint('🔥 CRITICAL [APP] Failed to initialize logger: $e');
+    debugPrint('Stack trace: $stackTrace');
+
+    // We can still run the app even if logging fails
+    debugPrint(
+      '📝 INFO [APP] Continuing application startup with limited logging',
+    );
+  }
+
   // Run the application wrapped with ProviderScope for Riverpod
-  runApp(const ProviderScope(child: App()));
+  runApp(UncontrolledProviderScope(container: container, child: const App()));
 }
 
+// The default template app code is commented out as it's not used
+/*
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -126,3 +166,4 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 }
+*/

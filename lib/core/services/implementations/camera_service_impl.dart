@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../camera_service.dart';
+import '../../../core/utils/logger.dart';
 
 /// Implementation of CameraService using the camera plugin
 class CameraServiceImpl implements CameraService {
@@ -46,6 +47,8 @@ class CameraServiceImpl implements CameraService {
 
       // Initialize with the back camera
       await _initializeCameraController();
+
+      Logger.info('CAMERA', 'Camera initialized successfully');
     } on CameraException catch (e) {
       // Handle camera initialization errors
       _handleCameraError(e);
@@ -71,7 +74,7 @@ class CameraServiceImpl implements CameraService {
         onOrientationChange: (DeviceOrientation orientation) {
           final previousOrientation = _currentOrientation;
           _currentOrientation = orientation;
-          debugPrint('📱 ORIENTATION: Changed to $_currentOrientation');
+          Logger.camera('ORIENTATION: Changed to $_currentOrientation');
 
           // If orientation has actually changed, adjust the camera settings
           if (previousOrientation != _currentOrientation) {
@@ -93,7 +96,7 @@ class CameraServiceImpl implements CameraService {
             : DeviceOrientation.portraitUp;
 
     _currentOrientation = orientation;
-    debugPrint('📱 ORIENTATION: Updated to $_currentOrientation');
+    Logger.camera('ORIENTATION: Updated to $_currentOrientation');
   }
 
   /// Handle orientation changes by updating the camera
@@ -105,8 +108,8 @@ class CameraServiceImpl implements CameraService {
       await _setRecordingOrientation();
 
       // Force a camera settings update to reflect the new orientation
-      debugPrint(
-        '📱 CAMERA: Adjusting preview for orientation change to $_currentOrientation',
+      Logger.camera(
+        'Adjusting preview for orientation change to $_currentOrientation',
       );
 
       // This will trigger any listeners to rebuild the camera preview
@@ -115,7 +118,7 @@ class CameraServiceImpl implements CameraService {
         await _controller!.setFocusMode(FocusMode.auto);
       }
     } catch (e) {
-      debugPrint('⚠️ CAMERA: Failed to adjust for orientation change: $e');
+      Logger.warning('CAMERA', 'Failed to adjust for orientation change: $e');
     }
   }
 
@@ -148,7 +151,7 @@ class CameraServiceImpl implements CameraService {
       await _controller!.setExposureMode(ExposureMode.auto);
       await _controller!.setFocusMode(FocusMode.auto);
     } catch (e) {
-      debugPrint('Warning: Could not set advanced camera settings: $e');
+      Logger.warning('CAMERA', 'Could not set advanced camera settings: $e');
     }
 
     // Do NOT lock orientation here - we want the camera to adapt to the device orientation
@@ -172,11 +175,9 @@ class CameraServiceImpl implements CameraService {
     // Set the capture orientation
     try {
       await _controller!.lockCaptureOrientation(recordingOrientation);
-      debugPrint(
-        '📱 CAMERA: Set recording orientation to $recordingOrientation',
-      );
+      Logger.camera('Set recording orientation to $recordingOrientation');
     } catch (e) {
-      debugPrint('⚠️ CAMERA: Failed to set recording orientation: $e');
+      Logger.warning('CAMERA', 'Failed to set recording orientation: $e');
     }
   }
 
@@ -194,8 +195,9 @@ class CameraServiceImpl implements CameraService {
   @override
   Future<void> startVideoRecording() async {
     if (!isInitialized) {
-      debugPrint(
-        '❌ CAMERA ERROR: Camera not initialized when attempting to start recording',
+      Logger.error(
+        'CAMERA',
+        'Camera not initialized when attempting to start recording',
       );
       throw CameraException(
         'Camera not initialized',
@@ -205,7 +207,10 @@ class CameraServiceImpl implements CameraService {
 
     if (_controller!.value.isRecordingVideo) {
       // Already recording, do nothing
-      debugPrint('⚠️ CAMERA: Already recording video, ignoring start request');
+      Logger.warning(
+        'CAMERA',
+        'Already recording video, ignoring start request',
+      );
       return;
     }
 
@@ -216,14 +221,16 @@ class CameraServiceImpl implements CameraService {
       // Set the recording orientation based on current device orientation
       await _setRecordingOrientation();
 
-      debugPrint(
-        '🎥 CAMERA: Starting video recording at ${DateTime.now().toIso8601String()} in orientation: $_currentOrientation',
+      Logger.info(
+        'CAMERA',
+        'Starting video recording at ${DateTime.now().toIso8601String()} in orientation: $_currentOrientation',
       );
       await _controller!.startVideoRecording();
-      debugPrint('✅ CAMERA: Video recording started successfully');
+      Logger.info('CAMERA', 'Video recording started successfully');
     } on CameraException catch (e) {
-      debugPrint(
-        '❌ CAMERA ERROR: Failed to start video recording: ${e.code} - ${e.description}',
+      Logger.error(
+        'CAMERA',
+        'Failed to start video recording: ${e.code} - ${e.description}',
       );
       _handleCameraError(e);
     }
@@ -232,8 +239,9 @@ class CameraServiceImpl implements CameraService {
   @override
   Future<String> stopVideoRecording() async {
     if (!isInitialized) {
-      debugPrint(
-        '❌ CAMERA ERROR: Camera not initialized when attempting to stop recording',
+      Logger.error(
+        'CAMERA',
+        'Camera not initialized when attempting to stop recording',
       );
       throw CameraException(
         'Camera not initialized',
@@ -242,13 +250,14 @@ class CameraServiceImpl implements CameraService {
     }
 
     if (!_controller!.value.isRecordingVideo) {
-      debugPrint('❌ CAMERA ERROR: Not recording video when stop was requested');
+      Logger.error('CAMERA', 'Not recording video when stop was requested');
       throw CameraException('Not recording', 'No active recording to stop');
     }
 
     try {
-      debugPrint(
-        '🎥 CAMERA: Stopping video recording at ${DateTime.now().toIso8601String()}',
+      Logger.info(
+        'CAMERA',
+        'Stopping video recording at ${DateTime.now().toIso8601String()}',
       );
       final XFile videoFile = await _controller!.stopVideoRecording();
 
@@ -256,15 +265,18 @@ class CameraServiceImpl implements CameraService {
       final file = File(videoFile.path);
       if (await file.exists()) {
         final size = await file.length();
-        debugPrint(
-          '✅ CAMERA: Video recording stopped successfully. File: ${videoFile.path}',
+        Logger.info(
+          'CAMERA',
+          'Video recording stopped successfully. File: ${videoFile.path}',
         );
-        debugPrint(
-          '📊 CAMERA: Recorded video file size: ${(size / 1024 / 1024).toStringAsFixed(2)} MB',
+        Logger.info(
+          'CAMERA',
+          'Recorded video file size: ${(size / 1024 / 1024).toStringAsFixed(2)} MB',
         );
       } else {
-        debugPrint(
-          '⚠️ CAMERA: Video file does not exist after recording: ${videoFile.path}',
+        Logger.warning(
+          'CAMERA',
+          'Video file does not exist after recording: ${videoFile.path}',
         );
       }
 
@@ -276,15 +288,17 @@ class CameraServiceImpl implements CameraService {
         // Set the current orientation to match the device
         await _setRecordingOrientation();
       } catch (e) {
-        debugPrint(
-          '⚠️ CAMERA: Failed to reset orientation after recording: $e',
+        Logger.warning(
+          'CAMERA',
+          'Failed to reset orientation after recording: $e',
         );
       }
 
       return videoFile.path;
     } on CameraException catch (e) {
-      debugPrint(
-        '❌ CAMERA ERROR: Failed to stop video recording: ${e.code} - ${e.description}',
+      Logger.error(
+        'CAMERA',
+        'Failed to stop video recording: ${e.code} - ${e.description}',
       );
       _handleCameraError(e);
       return '';
@@ -318,8 +332,8 @@ class CameraServiceImpl implements CameraService {
         _currentOrientation == DeviceOrientation.landscapeLeft ||
         _currentOrientation == DeviceOrientation.landscapeRight;
 
-    debugPrint(
-      '📱 CAMERA: Building preview for orientation: $_currentOrientation (isLandscape: $isLandscape)',
+    Logger.camera(
+      'Building preview for orientation: $_currentOrientation (isLandscape: $isLandscape)',
     );
 
     // Use SizedBox.expand to fill the entire available space
@@ -362,6 +376,7 @@ class CameraServiceImpl implements CameraService {
       await _setRecordingOrientation();
 
       final XFile image = await _controller!.takePicture();
+      Logger.info('CAMERA', 'Picture taken successfully: ${image.path}');
       return image.path;
     } on CameraException catch (e) {
       _handleCameraError(e);
@@ -380,6 +395,7 @@ class CameraServiceImpl implements CameraService {
     _cameraIndex = (_cameraIndex + 1) % _cameras!.length;
 
     // Re-initialize with the new camera
+    Logger.info('CAMERA', 'Toggling to camera index: $_cameraIndex');
     await _initializeCameraController();
   }
 
@@ -395,7 +411,7 @@ class CameraServiceImpl implements CameraService {
   /// Handle camera exceptions
   void _handleCameraError(CameraException e) {
     // Log the error
-    debugPrint('Camera error: ${e.code} - ${e.description}');
+    Logger.error('CAMERA', 'Camera error: ${e.code} - ${e.description}', e);
 
     // Rethrow the exception
     throw e;

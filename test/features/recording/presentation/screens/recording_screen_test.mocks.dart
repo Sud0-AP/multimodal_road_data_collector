@@ -641,14 +641,14 @@ class MockRecordingSessionManager extends _i1.Mock
   _i3.Future<int> updateDataPointsInWindow(
     int? startTimestampMs,
     int? endTimestampMs,
-    bool? isPothole,
+    bool? isBump,
     String? userFeedback,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#updateDataPointsInWindow, [
               startTimestampMs,
               endTimestampMs,
-              isPothole,
+              isBump,
               userFeedback,
             ]),
             returnValue: _i3.Future<int>.value(0),

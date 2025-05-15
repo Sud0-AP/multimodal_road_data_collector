@@ -330,12 +330,6 @@ class SettingsScreen extends ConsumerWidget {
                       color: colorScheme.primary,
                     ),
                   ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: value,
-                  onChanged: isLoading ? null : onChanged,
-                  activeColor: colorScheme.primary,
-                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -344,7 +338,9 @@ class SettingsScreen extends ConsumerWidget {
               'These logs include timestamps, recording activities, and any errors encountered.',
               style: theme.textTheme.bodyMedium,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
+
+            // Show debug status
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -354,16 +350,77 @@ class SettingsScreen extends ConsumerWidget {
                         : colorScheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(
-                value ? 'Debug Logging: ON' : 'Debug Logging: OFF',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color:
-                      value
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    value ? Icons.circle : Icons.circle_outlined,
+                    size: 10,
+                    color:
+                        value
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    value ? 'Debugging Mode: ON' : 'Debugging Mode: OFF',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color:
+                          value
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Get the notifier to have access to the methods
+            Consumer(
+              builder: (context, ref, child) {
+                final notifier = ref.watch(settingsProvider.notifier);
+                final settings = ref.watch(settingsProvider);
+                final isDebuggingActive = settings.isDebugLoggingActive;
+
+                return Row(
+                  children: [
+                    // Start button
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            isLoading || isDebuggingActive
+                                ? null
+                                : () => notifier.startDebugLogging(),
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Start Logging'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.primary,
+                          foregroundColor: colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Stop button
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed:
+                            isLoading || !isDebuggingActive
+                                ? null
+                                : () => notifier.stopDebugLogging(),
+                        icon: const Icon(Icons.stop),
+                        label: const Text('Stop Logging'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),

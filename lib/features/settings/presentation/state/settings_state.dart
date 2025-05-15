@@ -9,6 +9,9 @@ class SettingsState {
   /// Controls whether debug logging is enabled
   final bool debuggingModeEnabled;
 
+  /// Indicates if debug logging is currently active
+  final bool isDebugLoggingActive;
+
   /// Indicates if settings are currently being saved
   final bool isSaving;
 
@@ -23,6 +26,7 @@ class SettingsState {
     this.bumpThresholdMultiplier = 5.0,
     this.annotationEnabled = true,
     this.debuggingModeEnabled = false,
+    this.isDebugLoggingActive = false,
     this.isSaving = false,
     this.errorMessage,
     this.successMessage,
@@ -33,6 +37,7 @@ class SettingsState {
     double? bumpThresholdMultiplier,
     bool? annotationEnabled,
     bool? debuggingModeEnabled,
+    bool? isDebugLoggingActive,
     bool? isSaving,
     String? errorMessage,
     String? successMessage,
@@ -42,6 +47,7 @@ class SettingsState {
           bumpThresholdMultiplier ?? this.bumpThresholdMultiplier,
       annotationEnabled: annotationEnabled ?? this.annotationEnabled,
       debuggingModeEnabled: debuggingModeEnabled ?? this.debuggingModeEnabled,
+      isDebugLoggingActive: isDebugLoggingActive ?? this.isDebugLoggingActive,
       isSaving: isSaving ?? this.isSaving,
       errorMessage: errorMessage ?? this.errorMessage,
       successMessage: successMessage ?? this.successMessage,

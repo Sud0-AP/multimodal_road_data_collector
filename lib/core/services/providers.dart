@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'camera_service.dart';
 import 'file_storage_service.dart';
+import 'logger_service.dart';
 import 'implementations/camera_service_impl.dart';
 import 'implementations/file_storage_service_impl.dart';
+import 'implementations/logger_service_impl.dart';
 import 'implementations/permission_service_impl.dart';
 import 'implementations/preferences_service_impl.dart';
 import 'implementations/sensor_service_impl.dart';
@@ -85,3 +87,80 @@ final spikeDetectionServiceProvider = Provider<SpikeDetectionService>((ref) {
 
   return service;
 });
+
+/// Provider for LoggerService
+final loggerServiceProvider = Provider<LoggerService>((ref) {
+  // Wait for preferences service to resolve before creating the logger
+  final fileStorage = ref.watch(fileStorageServiceProvider);
+  final preferencesAsync = ref.watch(preferencesServiceProvider);
+
+  // Handle async preference service
+  return preferencesAsync.when(
+    data: (preferences) {
+      final service = LoggerServiceImpl(
+        fileStorageService: fileStorage,
+        preferencesService: preferences,
+      );
+
+      // Initialize the service
+      service.initialize();
+
+      return service;
+    },
+    loading: () {
+      // Return a dummy implementation that does nothing until preferences are loaded
+      return DummyLoggerService();
+    },
+    error: (_, __) {
+      // Return a dummy implementation that does nothing if there's an error
+      return DummyLoggerService();
+    },
+  );
+});
+
+/// A dummy implementation of LoggerService that does nothing
+/// Used while preferences are loading or if there's an error
+class DummyLoggerService implements LoggerService {
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<String> startDebugSession() async => 'dummy_session';
+
+  @override
+  Future<void> endDebugSession() async {}
+
+  @override
+  bool isDebugSessionActive() => false;
+
+  @override
+  Future<void> info(String tag, String message) async {}
+
+  @override
+  Future<void> debug(String tag, String message) async {}
+
+  @override
+  Future<void> warning(String tag, String message) async {}
+
+  @override
+  Future<void> error(
+    String tag,
+    String message, [
+    dynamic exception,
+    StackTrace? stackTrace,
+  ]) async {}
+
+  @override
+  Future<void> critical(
+    String tag,
+    String message, [
+    dynamic exception,
+    StackTrace? stackTrace,
+  ]) async {}
+
+  @override
+  Future<String?> getCurrentLogFilePath() async => null;
+
+  @override
+  Future<List<String>> getLogFilePaths([String? sessionId]) async => [];
+}

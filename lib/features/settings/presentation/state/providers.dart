@@ -14,5 +14,6 @@ final resolvedPreferencesServiceProvider = Provider<PreferencesService>(
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
   (ref) => SettingsNotifier(
     preferencesService: ref.watch(resolvedPreferencesServiceProvider),
+    loggerService: ref.watch(loggerServiceProvider),
   ),
 );
